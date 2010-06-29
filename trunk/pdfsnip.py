@@ -94,23 +94,25 @@ class PDFsnip:
 
     def __init__(self):
         self.menu_items = (
-   	            ( "/_File",         None,         None, 0, "<Branch>" ),
-   	            ( "/File/_New",     "<control>N", self.about_dialog, 0, None ),
-   	            ( "/File/_Open",    "<control>O", self.about_dialog, 0, None ),
-   	            ( "/File/_Append",  "<control>I", self.on_action_add_doc_activate, 0, None ),
-   	            ( "/File/_Save",    "<control>S", self.save_file, 0, None ),
-   	            ( "/File/Save _As...", None,         self.choose_export_pdf_name, 0, None ),
-   	            ( "/File/sep1",     None,         None, 0, "<Separator>" ),
-   	            ( "/File/Quit",     "<control>Q", self.close_application, 0, None ),
-   	            ( "/_Edit/Delete",   "Delete",        self.clear_selected, 0, None ),
+   	            ( "/_File",             None,         None, 0, "<Branch>" ),
+   	            ( "/File/_New",         "<control>N", self.about_dialog, 0, None ),
+   	            ( "/File/_Open",        "<control>O", self.about_dialog, 0, None ),
+   	            ( "/File/_Append",      "<control>I", self.on_action_add_doc_activate, 0, None ),
+   	            ( "/File/_Save",        "<control>S", self.save_file, 0, None ),
+   	            ( "/File/Save _As...",  None,         self.choose_export_pdf_name, 0, None ),
+   	            ( "/File/sep1",         None,         None, 0, "<Separator>" ),
+   	            ( "/File/File _Info",   None,         None, 0, None ),
+   	            ( "/File/sep1",         None,         None, 0, "<Separator>" ),
+   	            ( "/File/Quit",         "<control>Q", self.close_application, 0, None ),
+   	            ( "/_Edit/Delete",      "Delete",     self.clear_selected, 0, None ),
    	            ( "/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None ),
    	            ( "/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None ),
-   	            ( "/_Edit/Crop...",   None,        self.crop_page_dialog, 0, None ),
-   	            ( "/_View/Zoom In",   "<control>+",  self.set_zoom_width, 0, None ),
-   	            ( "/_View/Zoom Out",   "<control>-",  None, 0, None ),
-   	            ( "/_View/Zoom To Width",   "<control>0",  None, 0, None ),
-   	            ( "/_Help",         None,         None, 0, None ),
-   	            ( "/_Help/About",   None,         self.about_dialog, 0, None ),
+   	            ( "/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None ),
+   	            ( "/_View/Zoom In",     None,         self.set_zoom_width, 0, None ),
+   	            ( "/_View/Zoom Out",    None,         None, 0, None ),
+   	            ( "/_View/Zoom To Width", "<control>0", None, 0, None ),
+   	            ( "/_Tools/Add thumbnails to file",   None,  None, 0, None ),
+   	            ( "/_Help/About",       None,         self.about_dialog, 0, None ),
    	            )
 
         # Create the temporary directory
@@ -298,9 +300,9 @@ class PDFsnip:
         else:
             title += "(several documents)"
 
-        title += 'PdfSnip'
         title += ' - PdfSnip'
-        self.window.set_title = title
+        self.window.set_title(title)
+        print "retitle():", title
 
 
     def get_main_menu(self, window):
@@ -443,6 +445,7 @@ class PDFsnip:
                                crop[2],crop[3]       )) # 10-11
             res = True
 
+        gobject.idle_add(self.retitle)
         if res and self.rendering_thread.paused:
             self.rendering_thread.paused = False
             self.rendering_thread.evnt.set()
@@ -1111,8 +1114,6 @@ class PDF_Renderer(threading.Thread,gobject.GObject):
             thumbnail = thumbnail.rotate_simple(rotation)
             pix_w = thumbnail.get_width()
             pix_h = thumbnail.get_height()
-            print "pix_w", pix_w
-            print "pix_h", pix_h
             if crop != [0.,0.,0.,0.]:
                 src_x = int( crop[0] * pix_w )
                 src_y = int( crop[2] * pix_h )
