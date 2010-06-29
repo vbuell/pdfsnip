@@ -7,7 +7,7 @@
  of PDF documents. 
  <http://code.google.com/p/pdfsnip/>
  
- Based on PDF-Shuffler by Konstantinos Poulios
+ Based on PDF-Shuffler by Konstantinos Poulios:
  <https://sourceforge.net/projects/pdfshuffler>
 
  --------------------------------------------------------------------------
@@ -61,7 +61,6 @@ except:
     print('No version of PyGTK was found on your system.')
     sys.exit(1)
 
-gtk.gdk.threads_init()
 import gobject      #to use custom signals
 import pango        #to adjust the text alignment in CellRendererText
 
@@ -93,6 +92,28 @@ class PDFsnip:
                   ('MODEL_ROW_EXTERN', gtk.TARGET_OTHER_APP, MODEL_ROW_EXTERN)]
 
     def __init__(self):
+        """
+        Item 1: The menu path. The letter after the underscore indicates an
+           accelerator key once the menu is open.
+        Item 2: The accelerator key for the entry
+        Item 3: The callback function.
+        Item 4: The callback action.  This changes the parameters with
+           which the function is called.  The default is 0.
+        Item 5: The item type, used to define what kind of an item it is.
+           Here are the possible values:
+
+           NULL               -> "<Item>"
+           ""                 -> "<Item>"
+           "<Title>"          -> create a title item
+           "<Item>"           -> create a simple item
+           "<CheckItem>"      -> create a check item
+           "<ToggleItem>"     -> create a toggle item
+           "<RadioItem>"      -> create a radio item
+           <path>             -> path of a radio item to link against
+           "<Separator>"      -> create a separator
+           "<Branch>"         -> create an item to hold sub items (optional)
+           "<LastBranch>"     -> create a right justified branch
+        """
         self.menu_items = (
    	            ( "/_File",             None,         None, 0, "<Branch>" ),
    	            ( "/File/_New",         "<control>N", self.about_dialog, 0, None ),
@@ -101,13 +122,14 @@ class PDFsnip:
    	            ( "/File/_Save",        "<control>S", self.save_file, 0, None ),
    	            ( "/File/Save _As...",  None,         self.choose_export_pdf_name, 0, None ),
    	            ( "/File/sep1",         None,         None, 0, "<Separator>" ),
-   	            ( "/File/File _Info",   None,         None, 0, None ),
+   	            ( "/File/File _Info",   None,         self.file_info, 0, None ),
    	            ( "/File/sep1",         None,         None, 0, "<Separator>" ),
    	            ( "/File/Quit",         "<control>Q", self.close_application, 0, None ),
    	            ( "/_Edit/Delete",      "Delete",     self.clear_selected, 0, None ),
    	            ( "/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None ),
    	            ( "/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None ),
    	            ( "/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None ),
+   	            ( "/_View/Use thumbnails when possible",     None,         None, 0, "<ToggleItem>" ),
    	            ( "/_View/Zoom In",     None,         self.set_zoom_width, 0, None ),
    	            ( "/_View/Zoom Out",    None,         None, 0, None ),
    	            ( "/_View/Zoom To Width", "<control>0", None, 0, None ),
@@ -134,7 +156,7 @@ class PDFsnip:
         self.window.set_title('PdfSnip')
         self.window.set_border_width(0)
         self.window.move(self.prefs['window x'], self.prefs['window y'])
-        self.window.set_size_request(self.prefs['window width'],
+        self.window.set_default_size(self.prefs['window width'],
                                      self.prefs['window height'])
         self.window.connect('delete_event', self.close_application)
         self.window.show()
@@ -430,7 +452,6 @@ class PDFsnip:
         for npage in range(n_start, n_end + 1):
             descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
             width = self.iv_col_width
-            print "Width of iv_col:", width
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, width, width)
             self.model.append((descriptor,              # 0
@@ -899,6 +920,24 @@ class PDFsnip:
             self.rendering_thread.evnt.set()
             self.rendering_thread.evnt.clear()
 
+
+    # =======================================================
+    def file_info(self, widget, event):
+        """Shows info about opened file(s)"""
+
+        info = "<b>Filename: </b>"
+        if len(self.pdfqueue) == 1:
+            info += self.pdfqueue[0].filename
+
+        error_msg_win = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
+                                          type=gtk.MESSAGE_INFO,
+                                          message_format=info,
+                                          buttons=gtk.BUTTONS_OK)
+        error_msg_win.set_markup(info)
+        response = error_msg_win.run()
+        if response == gtk.RESPONSE_OK:
+            error_msg_win.destroy()
+
     # =======================================================
     def crop_page_dialog(self, widget):
         """Opens a dialog box to define margins for page cropping"""
@@ -1057,27 +1096,46 @@ class PDF_Renderer(threading.Thread,gobject.GObject):
                self.evnt.wait()
 
     # =======================================================
-    def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
-        """Create pdf pixbuf"""
+    def bbox_upscale(self, box, gizmo):
+        pix_w, pix_h = box
+        if pix_h > pix_w:
+            pix_scale = float(gizmo)/float(pix_h)
+            pix_w = int(float(gizmo) * float(pix_w) / float(pix_h))
+            pix_h = gizmo
+        elif pix_h < pix_w:
+            pix_scale = float(gizmo)/float(pix_w)
+            pix_h = int(float(gizmo) * float(pix_h) / float(pix_w))
+            pix_w = gizmo
+        else:
+            pix_scale = float(gizmo)/float(pix_w)
+            pix_w = gizmo
+            pix_h = gizmo
+        return (pix_w, pix_h, pix_scale)
 
-        page = pdfdoc.document.get_page(npage-1)
-        try:
+    def render_pdf_page(self, page, gizmo_size, antialiazing=True, prefer_thumbs=True):
+        """Create pixbuf from page"""
+        got_pixbuf = False
+        if prefer_thumbs:
+            thumbnail = page.get_thumbnail_pixbuf()
+            if thumbnail:
+                got_pixbuf = True
+                print "Got thumbnail!!!!", thumbnail.get_width(), thumbnail.get_height()
+                pix_w = thumbnail.get_width()
+                pix_h = thumbnail.get_height()
+                # Scale thumbnail
+                pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), self.default_width)
+                thumbnail_small = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
+                                       8, pix_w , pix_h)
+                thumbnail.scale(thumbnail_small, 0, 0, pix_w , pix_h, 0, 0,
+                                pix_scale,
+                                pix_scale,
+                                gtk.gdk.INTERP_BILINEAR)
+                thumbnail = thumbnail_small
+        if not got_pixbuf:
+            # Render page
             pix_w, pix_h = page.get_size()
-            print "Page size: ", pix_w, pix_h
-
             if self.scale == 0:
-                if pix_h > pix_w:
-                    pix_scale = float(self.default_width)/float(pix_h)
-                    pix_w = int(float(self.default_width) * float(pix_w) / float(pix_h))
-                    pix_h = self.default_width
-                elif pix_h < pix_w:
-                    pix_scale = float(self.default_width)/float(pix_w)
-                    pix_h = int(float(self.default_width) * float(pix_h) / float(pix_w))
-                    pix_w = self.default_width
-                else:
-                    pix_scale = float(self.default_width)/float(pix_w)
-                    pix_w = self.default_width
-                    pix_h = self.default_width
+                pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), self.default_width)
             else:
                 pix_scale = self.scale
                 pix_w = int(pix_w * self.scale)
@@ -1105,9 +1163,15 @@ class PDF_Renderer(threading.Thread,gobject.GObject):
                                 float(1)/float(self.antialiazing_factor),
                                 gtk.gdk.INTERP_BILINEAR)
                 thumbnail = thumbnail_small
+        return thumbnail
 
 
-#            thumbnail = page.get_thumbnail()
+    def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
+        """Create pdf pixbuf"""
+
+        page = pdfdoc.document.get_page(npage-1)
+        try:
+            thumbnail = self.render_pdf_page(page, self.default_width, antialiazing=True, prefer_thumbs=True)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
@@ -1167,6 +1231,7 @@ class PDF_Renderer(threading.Thread,gobject.GObject):
 
 # =======================================================
 if __name__ == '__main__':
+    gtk.gdk.threads_init()
     PDFsnip()
 #    gtk.gdk.threads_enter()
     gtk.main()
