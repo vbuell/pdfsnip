@@ -64,6 +64,12 @@ except:
 import gobject      #to use custom signals
 import pango        #to adjust the text alignment in CellRendererText
 import gconf
+import cairo
+
+try:
+    import djvu.decode
+except:
+    print("python-djvulibre wasn't found. Djvu is disabled.")
 
 import poppler      #for the rendering of pdf pages
 from pyPdf import PdfFileWriter, PdfFileReader
@@ -322,7 +328,13 @@ class PDFsnip:
 
         # Importing documents passed as command line arguments
         for filename in sys.argv[1:]:
-            self.add_pdf_pages(filename)
+            self.filename = os.path.abspath(filename)
+            (self.path, self.shortname) = os.path.split(self.filename)
+            (self.shortname, self.ext) = os.path.splitext(self.shortname)
+            if self.ext.lower() == '.djvu':
+                self.add_djvu_pages(filename)
+            elif self.ext.lower() == '.pdf':
+                self.add_pdf_pages(filename)
 
 
     def set_dirty(self, flag):
@@ -449,6 +461,65 @@ class PDFsnip:
         else:
             sys.exit(0)
         return False
+
+    # =======================================================
+    def add_djvu_pages(self, filename,
+                            firstpage=None, lastpage=None,
+                            angle=0, crop=[0.,0.,0.,0.]   ):
+        """Add pages of a pdf document to the model"""
+
+        print "add_djvu_pages"
+
+        res = False
+        # Check if the document has already been loaded
+        pdfdoc = None
+        for it_pdfdoc in self.pdfqueue:
+            if os.path.isfile(it_pdfdoc.filename) and \
+               os.path.samefile(filename, it_pdfdoc.filename) and \
+               os.path.getmtime(filename) is it_pdfdoc.mtime:
+                pdfdoc = it_pdfdoc
+                break
+
+        if not pdfdoc:
+            pdfdoc = DJVU_Doc(filename, self.nfile, self.tmp_dir)
+            self.import_directory = os.path.split(filename)[0]
+            self.export_directory = self.import_directory
+            if pdfdoc.nfile != 0 and pdfdoc != []:
+                self.nfile = pdfdoc.nfile
+                self.pdfqueue.append(pdfdoc)
+            else:
+                return res
+
+        n_start = 1
+        n_end = pdfdoc.npage
+        if firstpage:
+           n_start = min(n_end, max(1, firstpage))
+        if lastpage:
+           n_end = max(n_start, min(n_end, lastpage))
+
+        for npage in range(n_start, n_end + 1):
+            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
+            width = self.iv_col_width
+            thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
+                                       8, width, width)
+            self.model.append((descriptor,              # 0
+                               thumbnail,               # 1
+                               pdfdoc.nfile,            # 2
+                               npage,                   # 3
+                               width,                   # 4
+                               pdfdoc.filename,         # 5
+                               False,                   # 6
+                               angle,                   # 7
+                               crop[0],crop[1],         # 8-9
+                               crop[2],crop[3]       )) # 10-11
+            res = True
+
+        gobject.idle_add(self.retitle)
+        if res and self.rendering_thread.paused:
+            self.rendering_thread.paused = False
+            self.rendering_thread.evnt.set()
+            self.rendering_thread.evnt.clear()
+        return res
 
     # =======================================================
     def add_pdf_pages(self, filename,
@@ -655,6 +726,8 @@ class PDFsnip:
                     ext = os.path.splitext(filename)[1].lower()
                     if ext == '.pdf':
                         self.add_pdf_pages(filename)
+                    elif ext == '.djvu':
+                        self.add_djvu_pages(filename)
                     elif ext == '.odt' or ext == '.ods' or ext == '.odc':
                         print(_('OpenDocument not supported yet!'))
                     elif ext == '.png' or ext == '.jpg' or ext == '.tiff':
@@ -1081,6 +1154,33 @@ class PDF_Doc:
             self.nfile = 0
 
 
+class DJVU_Doc:
+    """Class handling djvu documents"""
+
+    def __init__(self, filename, nfile, tmp_dir):
+
+        print "DJVU_Doc.__init__"
+        self.djvu_context = djvu.decode.Context()
+
+        self.filename = os.path.abspath(filename)
+        (self.path, self.shortname) = os.path.split(self.filename)
+        (self.shortname, self.ext) = os.path.splitext(self.shortname)
+        if self.ext.lower() == '.djvu':
+            self.nfile = nfile + 1
+            self.mtime = os.path.getmtime(filename)
+            self.copyname = os.path.join(tmp_dir, '%02d_' % self.nfile +
+                                                  self.shortname + '.pdf')
+            shutil.copy(self.filename, self.copyname)
+            self.document = self.djvu_context.new_document(djvu.decode.FileURI(self.copyname))
+#            self.document = poppler.document_new_from_file ("file://" + self.copyname, None)
+            self.document.decoding_job.wait()
+            self.npage = len(self.document.pages)
+
+        else:
+            self.nfile = 0
+
+
+
 # =======================================================
 class PDF_Renderer(threading.Thread, gobject.GObject):
 
@@ -1101,33 +1201,37 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         self.default_width = width
 
     def run(self):
-       while not self.quit:
-           rendered_all = True
-           for row in self.model:
-               if self.quit:
-                   break
-               if not row[6]:
-                   rendered_all = False
-#                   gtk.gdk.threads_enter() # Overusing of threads_enter for models
-                   try:
-                       nfile = row[2]
-                       npage = row[3]
-                       angle = row[7]
-                       crop = [row[8],row[9],row[10],row[11]]
-                       pdfdoc = self.pdfqueue[nfile - 1]
-                       thumbnail = self.load_pdf_thumbnail(pdfdoc, npage, angle, crop)
-                       row[6] = True
-                       row[4] = thumbnail.get_width()
-                       row[1] = thumbnail
-                   finally:
-                       pass
+        while not self.quit:
+            rendered_all = True
+            for row in self.model:
+                if self.quit:
+                    break
+                if not row[6]:
+                    rendered_all = False
+#                    gtk.gdk.threads_enter() # Overusing of threads_enter for models
+                    try:
+                        nfile = row[2]
+                        npage = row[3]
+                        angle = row[7]
+                        crop = [row[8],row[9],row[10],row[11]]
+                        pdfdoc = self.pdfqueue[nfile - 1]
+                        if isinstance(pdfdoc, PDF_Doc):
+                            thumbnail = self.load_pdf_thumbnail(pdfdoc, npage, angle, crop)
+                        elif isinstance(pdfdoc, DJVU_Doc):
+                            thumbnail = self.load_djvu_thumbnail(pdfdoc, npage, angle, crop)
+
+                        row[6] = True
+                        row[4] = thumbnail.get_width()
+                        row[1] = thumbnail
+                    finally:
+                        pass
 #                       gtk.gdk.threads_leave()
-           if rendered_all:
-               self.paused = True
-               if self.model.get_iter_first(): #just checking if model isn't empty
-                   self.emit('reset_iv_width')
-#                   gobject.idle_add(self.reset_iv_width)
-               self.evnt.wait()
+            if rendered_all:
+                self.paused = True
+                if self.model.get_iter_first(): #just checking if model isn't empty
+                    self.emit('reset_iv_width')
+#                    gobject.idle_add(self.reset_iv_width)
+                self.evnt.wait()
 
     # =======================================================
     def bbox_upscale(self, box, gizmo):
@@ -1200,6 +1304,40 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         return thumbnail
 
 
+    def render_djvu_page(self, page, gizmo_size, antialiazing=True, prefer_thumbs=True):
+        """Create pixbuf from page"""
+        import numpy
+        
+        # Render page
+        page_job = page.decode(wait=True)
+        pix_w, pix_h = page_job.size
+#        pix_w, pix_h = page.get_size()
+        rect = (0, 0, pix_w, pix_h)
+
+#        pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, has_alpha=1, bits_per_sample=8, width=pix_h, height=pix_w)
+#        try:
+#            pa = pb.get_pixels_array()
+#        except AttributeError, e:
+#            print e
+#            pa = pb.pixel_array
+
+        mode = djvu.decode.RENDER_COLOR_ONLY
+        djvu_pixel_format = djvu.decode.PixelFormatRgbMask(0xff0000, 0xff00, 0xff, bpp=32)
+
+        bytes_per_line = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, pix_w)
+        color_buffer = numpy.zeros((pix_h, bytes_per_line), dtype=numpy.uint32)
+        page_job.render(mode, rect, rect, djvu_pixel_format, row_alignment=bytes_per_line, buffer=color_buffer)
+        mask_buffer = numpy.zeros((pix_h, bytes_per_line), dtype=numpy.uint32)
+        if mode == djvu.decode.RENDER_FOREGROUND:
+            page_job.render(djvu.decode.RENDER_MASK_ONLY, rect, rect, djvu_pixel_format, row_alignment=bytes_per_line, buffer=mask_buffer)
+            mask_buffer <<= 24
+            color_buffer |= mask_buffer
+        color_buffer ^= 0xff000000
+#        surface = cairo.ImageSurface.create_for_data(color_buffer, cairo.FORMAT_ARGB32, pix_w, pix_h)
+        thumbnail = gtk.gdk.pixbuf_new_from_data(color_buffer, gtk.gdk.COLORSPACE_RGB, True, 32, pix_w, pix_h, 0)
+
+        return thumbnail
+
     def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
 
@@ -1232,9 +1370,53 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                                        8, pix_w, pix_h)
             thumbnail.fill(0xffffffff)
 
+        thumbnail = self.make_shadow(thumbnail)
+
+        return thumbnail
+
+
+    def load_djvu_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
+        """Create pdf pixbuf"""
+
+        page = pdfdoc.document.pages[npage-1]
+        try:
+            thumbnail = self.render_djvu_page(page, self.default_width, antialiazing=True, prefer_thumbs=True)
+
+            rotation = (-rotation) % 360
+            rotation = ((rotation + 45) / 90) * 90
+            thumbnail = thumbnail.rotate_simple(rotation)
+            pix_w = thumbnail.get_width()
+            pix_h = thumbnail.get_height()
+            if crop != [0.,0.,0.,0.]:
+                src_x = int( crop[0] * pix_w )
+                src_y = int( crop[2] * pix_h )
+                width = int( (1. - crop[0] - crop[1]) * pix_w )
+                height = int( (1. - crop[2] - crop[3]) * pix_h )
+                new_thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
+                                               8, width, height)
+                thumbnail.copy_area(src_x, src_y, width, height,
+                                    new_thumbnail, 0, 0)
+                thumbnail = new_thumbnail
+                pix_w = thumbnail.get_width()
+                pix_h = thumbnail.get_height()
+        except Exception, e:
+            print "Exception detected:", e
+            pix_w = self.default_width
+            pix_h = pix_w
+            thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
+                                       8, pix_w, pix_h)
+            thumbnail.fill(0xffffffff)
+
+        thumbnail = self.make_shadow(thumbnail)
+
+        return thumbnail
+
+    def make_shadow(self, thumbnail):
         # add border and shadows
         # canvas
         thickness = 2
+        pix_w = thumbnail.get_width()
+        pix_h = thumbnail.get_height()
         color = 0xFFFFFF00
         canvas = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, True, 8,
                                 pix_w + thickness + 1,
@@ -1270,4 +1452,3 @@ if __name__ == '__main__':
 #    gtk.gdk.threads_enter()
     gtk.main()
 #    gtk.gdk.threads_leave()
-
