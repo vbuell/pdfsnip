@@ -63,9 +63,16 @@ except:
 
 import gobject      #to use custom signals
 import pango        #to adjust the text alignment in CellRendererText
+import gconf
 
 import poppler      #for the rendering of pdf pages
 from pyPdf import PdfFileWriter, PdfFileReader
+
+ROOT_DIR = '/apps/pdfsnip'
+
+KEY_THUMBNAILS = ROOT_DIR + '/prefer_embedded_thumbnails'
+KEY_WINDOW_WIDTH = ROOT_DIR + '/ui_width'
+KEY_WINDOW_HEIGHT = ROOT_DIR + '/ui_height'
 
 class PDFsnip:
     # =======================================================
@@ -116,8 +123,8 @@ class PDFsnip:
         """
         self.menu_items = (
    	            ( "/_File",             None,         None, 0, "<Branch>" ),
-   	            ( "/File/_New",         "<control>N", self.about_dialog, 0, None ),
-   	            ( "/File/_Open",        "<control>O", self.about_dialog, 0, None ),
+#   	            ( "/File/_New",         "<control>N", self.about_dialog, 0, None ),
+#   	            ( "/File/_Open",        "<control>O", self.about_dialog, 0, None ),
    	            ( "/File/_Append",      "<control>I", self.on_action_add_doc_activate, 0, None ),
    	            ( "/File/_Save",        "<control>S", self.save_file, 0, None ),
    	            ( "/File/Save _As...",  None,         self.choose_export_pdf_name, 0, None ),
@@ -129,13 +136,26 @@ class PDFsnip:
    	            ( "/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None ),
    	            ( "/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None ),
    	            ( "/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None ),
-   	            ( "/_View/Use thumbnails when possible",     None,         None, 0, "<ToggleItem>" ),
+   	            ( "/_View/Use thumbnails when possible",     None, self.toggle_use_thumbnails, 0, "<ToggleItem>" ),
    	            ( "/_View/Zoom In",     None,         self.set_zoom_width, 0, None ),
    	            ( "/_View/Zoom Out",    None,         None, 0, None ),
    	            ( "/_View/Zoom To Width", "<control>0", None, 0, None ),
-   	            ( "/_Tools/Add thumbnails to file",   None,  None, 0, None ),
+#   	            ( "/_Tools/Add thumbnails to file",   None,  None, 0, None ),
    	            ( "/_Help/About",       None,         self.about_dialog, 0, None ),
    	            )
+        # GConf stuff
+        self.gconf_client = gconf.client_get_default()
+        self.gconf_client.add_dir(ROOT_DIR, gconf.CLIENT_PRELOAD_NONE)
+
+        try:
+            gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_WIDTH))
+            if gconf_value:
+                self.prefs['window width'] = gconf_value
+            gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_HEIGHT))
+            if gconf_value:
+                self.prefs['window height'] = gconf_value
+        except Exception, e:
+            print e
 
         # Create the temporary directory
         self.tmp_dir = tempfile.mkdtemp("pdfsnip")
@@ -345,10 +365,20 @@ class PDFsnip:
         # Attach the new accelerator group to the window.
         window.add_accel_group(accel_group)
 
+        item_use_thumbs = item_factory.get_widget("/View/Use thumbnails when possible")
+        print "item_factory.get_item(/_View/Use thumbnails when possible)", item_use_thumbs
+        try:
+            item_use_thumbs.set_active(self.gconf_client.get_bool(KEY_THUMBNAILS))
+        except Exception, e:
+            print e
+
         # need to keep a reference to item_factory to prevent its destruction
         self.item_factory = item_factory
         # Finally, return the actual menu bar created by the item factory.
         return item_factory.get_widget("<main>")
+
+    def toggle_use_thumbnails(self, window, event):
+        self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
 
     def set_zoom_width(self, window, event):
         
@@ -401,6 +431,10 @@ class PDFsnip:
     # =======================================================
     def close_application(self, widget, event=None, data=None):
         """Termination"""
+
+        # save configuration
+        self.gconf_client.set_string(KEY_WINDOW_WIDTH, str(self.window.get_size()[0]))
+        self.gconf_client.set_string(KEY_WINDOW_HEIGHT, str(self.window.get_size()[1]))
 
         #gtk.gdk.threads_leave()
         self.rendering_thread.quit = True
@@ -1048,7 +1082,7 @@ class PDF_Doc:
 
 
 # =======================================================
-class PDF_Renderer(threading.Thread,gobject.GObject):
+class PDF_Renderer(threading.Thread, gobject.GObject):
 
     def __init__(self, model, pdfqueue, scale=1., width=100):
         threading.Thread.__init__(self)
