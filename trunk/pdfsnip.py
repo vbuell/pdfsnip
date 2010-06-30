@@ -1250,6 +1250,19 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             pix_h = gizmo
         return (pix_w, pix_h, pix_scale)
 
+    def scale_pixbuf(self, pixbuf, gizmo_size):
+        pix_w = pixbuf.get_width()
+        pix_h = pixbuf.get_height()
+        # Scale pixbuf
+        pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), gizmo_size)
+        thumbnail_small = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
+                               8, pix_w , pix_h)
+        pixbuf.scale(thumbnail_small, 0, 0, pix_w , pix_h, 0, 0,
+                        pix_scale,
+                        pix_scale,
+                        gtk.gdk.INTERP_BILINEAR)
+        return thumbnail_small
+
     def render_pdf_page(self, page, gizmo_size, antialiazing=True, prefer_thumbs=True):
         """Create pixbuf from page"""
         got_pixbuf = False
@@ -1258,17 +1271,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             if thumbnail:
                 got_pixbuf = True
                 print "Got thumbnail!!!!", thumbnail.get_width(), thumbnail.get_height()
-                pix_w = thumbnail.get_width()
-                pix_h = thumbnail.get_height()
-                # Scale thumbnail
-                pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), self.default_width)
-                thumbnail_small = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
-                                       8, pix_w , pix_h)
-                thumbnail.scale(thumbnail_small, 0, 0, pix_w , pix_h, 0, 0,
-                                pix_scale,
-                                pix_scale,
-                                gtk.gdk.INTERP_BILINEAR)
-                thumbnail = thumbnail_small
+                thumbnail = self.scale_pixbuf(thumbnail, self.default_width)
         if not got_pixbuf:
             # Render page
             pix_w, pix_h = page.get_size()
@@ -1291,23 +1294,14 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             page.render_to_pixbuf(0,0,pix_w,pix_h, pix_scale, 0, thumbnail)
 
             if self.antialiazing:
-                pix_w = pix_w/self.antialiazing_factor
-                pix_h = pix_h/self.antialiazing_factor
-                pix_scale = pix_scale/self.antialiazing_factor
-                thumbnail_small = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
-                                       8, pix_w , pix_h)
-                thumbnail.scale(thumbnail_small, 0, 0, pix_w , pix_h, 0, 0,
-                                float(1)/float(self.antialiazing_factor),
-                                float(1)/float(self.antialiazing_factor),
-                                gtk.gdk.INTERP_BILINEAR)
-                thumbnail = thumbnail_small
+                thumbnail = self.scale_pixbuf(thumbnail, self.default_width)
         return thumbnail
 
 
     def render_djvu_page(self, page, gizmo_size, antialiazing=True, prefer_thumbs=True):
         """Create pixbuf from page"""
         import numpy
-        
+
         # Render page
         page_job = page.decode(wait=True)
         pix_w, pix_h = page_job.size
@@ -1324,21 +1318,30 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         mode = djvu.decode.RENDER_FOREGROUND
         djvu_pixel_format = djvu.decode.PixelFormatRgbMask(0xff0000, 0xff00, 0xff, bpp=32)
 
-        bytes_per_line = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, pix_w)
-        color_buffer = numpy.zeros((pix_h, bytes_per_line), dtype=numpy.uint32)
-        print "1", mode, rect, rect, djvu_pixel_format, bytes_per_line
-        color_buffer = page_job.render(mode, rect, rect, djvu_pixel_format, row_alignment=bytes_per_line) # buffer=color_buffer
-        print "2", color_buffer
-        mask_buffer = numpy.zeros((pix_h, bytes_per_line), dtype=numpy.uint32)
-        if mode == djvu.decode.RENDER_FOREGROUND:
-            mask_buffer = page_job.render(djvu.decode.RENDER_MASK_ONLY, rect, rect, djvu_pixel_format, row_alignment=bytes_per_line) # , buffer=mask_buffer
-            mask_buffer <<= 24
-            color_buffer |= mask_buffer
-        color_buffer ^= 0xff000000
-#        surface = cairo.ImageSurface.create_for_data(color_buffer, cairo.FORMAT_ARGB32, pix_w, pix_h)
-        thumbnail = gtk.gdk.pixbuf_new_from_data(color_buffer, gtk.gdk.COLORSPACE_RGB, True, 32, pix_w, pix_h, 0)
+        try:
+#            bytes_per_line = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, pix_w)
+            bytes_per_line = pix_w * 4
+            color_buffer = numpy.zeros((pix_h, bytes_per_line), dtype=numpy.uint32)
+            print "1", mode, rect, rect, djvu_pixel_format, bytes_per_line, len(color_buffer)
+            color_buffer = page_job.render(mode, rect, rect, djvu_pixel_format, row_alignment=bytes_per_line) # buffer=color_buffer
+            print "2", type(color_buffer), len(color_buffer)
+    #        mask_buffer = numpy.zeros((pix_h, bytes_per_line), dtype=numpy.uint32)
+    #        if mode == djvu.decode.RENDER_FOREGROUND:
+    #            mask_buffer = page_job.render(djvu.decode.RENDER_MASK_ONLY, rect, rect, djvu_pixel_format, row_alignment=bytes_per_line) # , buffer=mask_buffer
+    #            mask_buffer <<= 24
+    #            color_buffer |= mask_buffer
+    #        color_buffer ^= 0xff000000
+    #        surface = cairo.ImageSurface.create_for_data(color_buffer, cairo.FORMAT_ARGB32, pix_w, pix_h)
+            thumbnail = gtk.gdk.pixbuf_new_from_data(color_buffer, gtk.gdk.COLORSPACE_RGB, False, 8, pix_w, pix_h, bytes_per_line)
 
-        return thumbnail
+            # Resize
+            thumbnail = self.scale_pixbuf(thumbnail, self.default_width)
+
+            print "3"
+            return thumbnail
+        except Exception, e:
+            print "Type:", type(e), "Message:", e
+            
 
     def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
@@ -1364,7 +1367,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                 thumbnail = new_thumbnail
                 pix_w = thumbnail.get_width()
                 pix_h = thumbnail.get_height()
-        except Exception, e:
+        except Error, e:
             print "Exception detected:", e
             pix_w = self.default_width
             pix_h = pix_w
