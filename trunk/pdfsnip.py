@@ -143,8 +143,8 @@ class PDFsnip:
    	            ( "/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None ),
    	            ( "/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None ),
    	            ( "/_View/Use thumbnails when possible",     None, self.toggle_use_thumbnails, 0, "<ToggleItem>" ),
-   	            ( "/_View/Zoom In",     None,         self.set_zoom_width, 0, None ),
-   	            ( "/_View/Zoom Out",    None,         None, 0, None ),
+   	            ( "/_View/Zoom In",     None,         self.set_zoom_in, 0, None ),
+   	            ( "/_View/Zoom Out",    None,         self.set_zoom_out, 0, None ),
    	            ( "/_View/Zoom To Width", "<control>0", None, 0, None ),
 #   	            ( "/_Tools/Add thumbnails to file",   None,  None, 0, None ),
    	            ( "/_Help/About",       None,         self.about_dialog, 0, None ),
@@ -392,9 +392,22 @@ class PDFsnip:
     def toggle_use_thumbnails(self, window, event):
         self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
 
-    def set_zoom_width(self, window, event):
+    def set_zoom_in(self, window, event):
         
         self.gizmo_size = self.gizmo_size * 2
+        self.rendering_thread.set_width(self.gizmo_size)
+
+        for row in self.model:
+           row[6] = False
+
+        if self.rendering_thread.paused:
+            self.rendering_thread.paused = False
+            self.rendering_thread.evnt.set()
+            self.rendering_thread.evnt.clear()
+
+    def set_zoom_out(self, window, event):
+
+        self.gizmo_size = self.gizmo_size / 2
         self.rendering_thread.set_width(self.gizmo_size)
 
         for row in self.model:
@@ -1332,6 +1345,9 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
     #            color_buffer |= mask_buffer
     #        color_buffer ^= 0xff000000
     #        surface = cairo.ImageSurface.create_for_data(color_buffer, cairo.FORMAT_ARGB32, pix_w, pix_h)
+            # remove alpha
+#            out = [object for index, object in enumerate(color_buffer) if index % 4 != 3]
+#            print "Size without alpha:", len(out)
             thumbnail = gtk.gdk.pixbuf_new_from_data(color_buffer, gtk.gdk.COLORSPACE_RGB, False, 8, pix_w, pix_h, bytes_per_line)
 
             # Resize
