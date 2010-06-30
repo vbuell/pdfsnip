@@ -92,6 +92,7 @@ class PDFsnip:
         'initial thumbnail size': 300,
         'initial zoom scale': 0.25,
         'initial gizmo size': 200,
+        'prefer thumbnails': True,
     }
 
     MODEL_ROW_INTERN = 1001
@@ -160,6 +161,9 @@ class PDFsnip:
             gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_HEIGHT))
             if gconf_value:
                 self.prefs['window height'] = gconf_value
+            gconf_value = int(self.gconf_client.get_bool(KEY_THUMBNAILS))
+            if isinstance(gconf_value, bool):
+                self.prefs['prefer thumbnails'] = gconf_value
         except Exception, e:
             print e
 
@@ -191,7 +195,7 @@ class PDFsnip:
         vbox = gtk.VBox()
         self.window.add(vbox)
 
-        menubar = self.get_main_menu(self.window)
+        menubar = self.create_main_menu(self.window)
         vbox.pack_start(menubar, False, True, 0)
         menubar.show()
 
@@ -321,6 +325,7 @@ class PDFsnip:
                                              0, self.gizmo_size)
 #                                             self.zoom_scale, self.gizmo_size)
         self.rendering_thread.connect('reset_iv_width', self.reset_iv_width)
+        self.rendering_thread.set_prefer_thumbnails(self.prefs['prefer thumbnails'])
         self.rendering_thread.daemon = True
         self.rendering_thread.start()
 
@@ -359,7 +364,7 @@ class PDFsnip:
         print "retitle():", title
 
 
-    def get_main_menu(self, window):
+    def create_main_menu(self, window):
         accel_group = gtk.AccelGroup()
 
         # This function initializes the item factory.
@@ -378,7 +383,6 @@ class PDFsnip:
         window.add_accel_group(accel_group)
 
         item_use_thumbs = item_factory.get_widget("/View/Use thumbnails when possible")
-        print "item_factory.get_item(/_View/Use thumbnails when possible)", item_use_thumbs
         try:
             item_use_thumbs.set_active(self.gconf_client.get_bool(KEY_THUMBNAILS))
         except Exception, e:
@@ -391,8 +395,19 @@ class PDFsnip:
 
     def toggle_use_thumbnails(self, window, event):
         self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
+        self.prefs['prefer thumbnails'] = event.get_active()
+        self.rendering_thread.set_prefer_thumbnails(event.get_active())
+
+        for row in self.model:
+           row[6] = False
+
+        if self.rendering_thread.paused:
+            self.rendering_thread.paused = False
+            self.rendering_thread.evnt.set()
+            self.rendering_thread.evnt.clear()
 
     def set_zoom_in(self, window, event):
+        """Zoom in icons view."""
         
         self.gizmo_size = self.gizmo_size * 2
         self.rendering_thread.set_width(self.gizmo_size)
@@ -406,6 +421,7 @@ class PDFsnip:
             self.rendering_thread.evnt.clear()
 
     def set_zoom_out(self, window, event):
+        """Zoom out icons view."""
 
         self.gizmo_size = self.gizmo_size / 2
         self.rendering_thread.set_width(self.gizmo_size)
@@ -1209,9 +1225,13 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         self.paused = False
         self.antialiazing = True
         self.antialiazing_factor = 4
+        self.prefer_thumbnails = True
 
     def set_width(self, width):
         self.default_width = width
+
+    def set_prefer_thumbnails(self, flag):
+        self.prefer_thumbnails = flag
 
     def run(self):
         while not self.quit:
@@ -1364,7 +1384,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 
         page = pdfdoc.document.get_page(npage-1)
         try:
-            thumbnail = self.render_pdf_page(page, self.default_width, antialiazing=True, prefer_thumbs=True)
+            thumbnail = self.render_pdf_page(page, self.default_width, antialiazing=True, prefer_thumbs=self.prefer_thumbnails)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
@@ -1383,7 +1403,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                 thumbnail = new_thumbnail
                 pix_w = thumbnail.get_width()
                 pix_h = thumbnail.get_height()
-        except Error, e:
+        except Exception, e:
             print "Exception detected:", e
             pix_w = self.default_width
             pix_h = pix_w
@@ -1401,7 +1421,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 
         page = pdfdoc.document.pages[npage-1]
         try:
-            thumbnail = self.render_djvu_page(page, self.default_width, antialiazing=True, prefer_thumbs=True)
+            thumbnail = self.render_djvu_page(page, self.default_width, antialiazing=True, prefer_thumbs=self.prefer_thumbnails)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
