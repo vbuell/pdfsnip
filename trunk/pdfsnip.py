@@ -106,29 +106,10 @@ class PDFsnip:
                   ('MODEL_ROW_EXTERN', gtk.TARGET_OTHER_APP, MODEL_ROW_EXTERN)]
 
     def __init__(self):
-        """
-        Item 1: The menu path. The letter after the underscore indicates an
-           accelerator key once the menu is open.
-        Item 2: The accelerator key for the entry
-        Item 3: The callback function.
-        Item 4: The callback action.  This changes the parameters with
-           which the function is called.  The default is 0.
-        Item 5: The item type, used to define what kind of an item it is.
-           Here are the possible values:
-
-           NULL               -> "<Item>"
-           ""                 -> "<Item>"
-           "<Title>"          -> create a title item
-           "<Item>"           -> create a simple item
-           "<CheckItem>"      -> create a check item
-           "<ToggleItem>"     -> create a toggle item
-           "<RadioItem>"      -> create a radio item
-           <path>             -> path of a radio item to link against
-           "<Separator>"      -> create a separator
-           "<Branch>"         -> create an item to hold sub items (optional)
-           "<LastBranch>"     -> create a right justified branch
-        """
+        """Init main window"""
         self.menu_items = (
+                    # path,                 accelerator,  callback, params, type
+                    # type := {<Title>,<Item>,<CheckItem>,<ToggleItem>,<RadioItem>,<Separator>,<Branch>,<LastBranch>}
    	            ( "/_File",             None,         None, 0, "<Branch>" ),
 #   	            ( "/File/_New",         "<control>N", self.about_dialog, 0, None ),
 #   	            ( "/File/_Open",        "<control>O", self.about_dialog, 0, None ),
@@ -195,6 +176,7 @@ class PDFsnip:
         vbox = gtk.VBox()
         self.window.add(vbox)
 
+        # Create main menu
         menubar = self.create_main_menu(self.window)
         vbox.pack_start(menubar, False, True, 0)
         menubar.show()
@@ -212,11 +194,7 @@ class PDFsnip:
                               gtk.gdk.ACTION_MOVE )
         self.sw.connect('drag_data_received', self.sw_dnd_received_data)
         self.sw.connect('button_press_event', self.sw_button_press_event)
-        vbox.pack_start(self.sw)
-
-        # Create an alignment to keep the thumbnails center-aligned
-#        align = gtk.Alignment(0.5, 0.5, 0, 0)
-#        self.sw.add_with_viewport(align)
+        vbox.pack_start(self.sw, True, True, 0)
 
         # Create ListStore model and IconView
         self.model = gtk.ListStore(str,             # 0.Text descriptor
@@ -277,18 +255,47 @@ class PDFsnip:
             style.base[state] = style_sw.bg[gtk.STATE_NORMAL]
         self.iconview.set_style(style)
 
-#        align.add(self.iconview)
 #        self.sw.add_with_viewport(self.iconview)
         self.sw.add(self.iconview)
 
         # Status bar
-#        self.status_bar = gtk.Statusbar()
-#        vbox.pack_start(self.status_bar, True, True, 0)
-#        self.status_bar.show()
+        status_bar = gtk.Statusbar()
+        vbox.pack_start(status_bar, False, True, 0)
+
+        self.statusbar = gtk.HBox()
+
+        frame = status_bar.get_children()[0]
+        frame.remove(frame.get_children()[0])
+        frame.add(self.statusbar)
+
+#        context_id = self.status_bar.get_context_id("Statusbar example")
+        status_bar.show_all()
+#        self.status_bar.set_has_resize_grip(True)
+#        self.status_bar.push(context_id, "")
+
+#        # Add progress bar
+#        hbox = gtk.HBox()
+#        self.status_bar.add(hbox)
+
+        self.progress_bar = gtk.ProgressBar()
+        self.progress_bar.set_size_request(50, 0)
+        self.statusbar.pack_start(self.progress_bar, True, True, 0)
+#        self.progress_bar.pulse()
+        self.progress_bar.unrealize()
+        self.progress_bar.hide_all()
+
+        # Add zoom-in / zoom-out buttons
+        btn_zoom_out = gtk.Button(label="-")
+        self.statusbar.pack_start(btn_zoom_out, False, False, 0)
+        label_zoom = gtk.Label("100%")
+        self.statusbar.pack_start(label_zoom, False, False, 0)
+        btn_zoom_in = gtk.Button(label="+")
+        self.statusbar.pack_start(btn_zoom_in, False, False, 0)
+
+#        status_bar.hide_all()
 
         # Define window callback function and show window
         self.window.connect('size_allocate', self.on_window_size_request)        # resize
-#        self.window.connect('key_press_event', self.on_keypress_event ) # keypress
         self.window.show_all()
 
         # Creating the popup menu
@@ -321,10 +328,13 @@ class PDFsnip:
         gobject.type_register(PDF_Renderer)
         gobject.signal_new('reset_iv_width', PDF_Renderer,
                            gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, ())
+        gobject.signal_new('update_progress_bar', PDF_Renderer,
+                           gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_FLOAT])
         self.rendering_thread = PDF_Renderer(self.model, self.pdfqueue,
                                              0, self.gizmo_size)
 #                                             self.zoom_scale, self.gizmo_size)
         self.rendering_thread.connect('reset_iv_width', self.reset_iv_width)
+        self.rendering_thread.connect('update_progress_bar', self.update_progress_bar)
         self.rendering_thread.set_prefer_thumbnails(self.prefs['prefer thumbnails'])
         self.rendering_thread.daemon = True
         self.rendering_thread.start()
@@ -366,22 +376,10 @@ class PDFsnip:
 
     def create_main_menu(self, window):
         accel_group = gtk.AccelGroup()
-
-        # This function initializes the item factory.
-        # Param 1: The type of menu - can be MenuBar, Menu,
-        #          or OptionMenu.
-        # Param 2: The path of the menu.
-        # Param 3: A reference to an AccelGroup. The item factory sets up
-        #          the accelerator table while generating menus.
         item_factory = gtk.ItemFactory(gtk.MenuBar, "<main>", accel_group)
-
-        # This method generates the menu items. Pass to the item factory
-        #  the list of menu items
         item_factory.create_items(self.menu_items)
 
-        # Attach the new accelerator group to the window.
         window.add_accel_group(accel_group)
-
         item_use_thumbs = item_factory.get_widget("/View/Use thumbnails when possible")
         try:
             item_use_thumbs.set_active(self.gconf_client.get_bool(KEY_THUMBNAILS))
@@ -393,11 +391,8 @@ class PDFsnip:
         # Finally, return the actual menu bar created by the item factory.
         return item_factory.get_widget("<main>")
 
-    def toggle_use_thumbnails(self, window, event):
-        self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
-        self.prefs['prefer thumbnails'] = event.get_active()
-        self.rendering_thread.set_prefer_thumbnails(event.get_active())
-
+    def redraw_thumbnails(self):
+        """Drop all existing thumbnails and start rendering thread again"""
         for row in self.model:
            row[6] = False
 
@@ -405,35 +400,34 @@ class PDFsnip:
             self.rendering_thread.paused = False
             self.rendering_thread.evnt.set()
             self.rendering_thread.evnt.clear()
+
+    def toggle_use_thumbnails(self, window, event):
+        self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
+        self.prefs['prefer thumbnails'] = event.get_active()
+        self.rendering_thread.set_prefer_thumbnails(event.get_active())
+        self.redraw_thumbnails()
+
+    def update_progress_bar(self, object, fraction):
+        print "$$$$", fraction
+        self.progress_bar.set_fraction(fraction)
+        if fraction == 1.0:
+            self.progress_bar.unrealize()
+            self.progress_bar.hide_all()
+
 
     def set_zoom_in(self, window, event):
         """Zoom in icons view."""
         
         self.gizmo_size = self.gizmo_size * 2
         self.rendering_thread.set_width(self.gizmo_size)
-
-        for row in self.model:
-           row[6] = False
-
-        if self.rendering_thread.paused:
-            self.rendering_thread.paused = False
-            self.rendering_thread.evnt.set()
-            self.rendering_thread.evnt.clear()
+        self.redraw_thumbnails()
 
     def set_zoom_out(self, window, event):
         """Zoom out icons view."""
 
         self.gizmo_size = self.gizmo_size / 2
         self.rendering_thread.set_width(self.gizmo_size)
-
-        for row in self.model:
-           row[6] = False
-
-        if self.rendering_thread.paused:
-            self.rendering_thread.paused = False
-            self.rendering_thread.evnt.set()
-            self.rendering_thread.evnt.clear()
-
+        self.redraw_thumbnails()
 
     # =======================================================
     def on_window_size_request(self, window, event):
@@ -460,14 +454,6 @@ class PDFsnip:
             self.celltxt.set_property('wrap-width', self.iv_col_width)
             self.iconview.set_item_width(self.iv_col_width + 12) #-1)
             self.on_window_size_request(self.window, None)
-
-    # =======================================================
-    def on_keypress_event(self, widget, event):
-        """Keypress events in Main Window"""
-
-        #keyname = gtk.gdk.keyval_name(event.keyval)
-        if event.keyval == 65535:   # Delete keystroke
-            self.clear_selected()
 
     # =======================================================
     def close_application(self, widget, event=None, data=None):
@@ -1236,9 +1222,11 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
     def run(self):
         while not self.quit:
             rendered_all = True
+            page_num = 0
             for row in self.model:
                 if self.quit:
                     break
+                page_num = page_num + 1
                 if not row[6]:
                     rendered_all = False
 #                    gtk.gdk.threads_enter() # Overusing of threads_enter for models
@@ -1259,6 +1247,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                     finally:
                         pass
 #                       gtk.gdk.threads_leave()
+                    self.emit('update_progress_bar', float(page_num) / len(self.model))
             if rendered_all:
                 self.paused = True
                 if self.model.get_iter_first(): #just checking if model isn't empty
