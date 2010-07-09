@@ -93,6 +93,7 @@ class PDFsnip:
         'initial zoom scale': 0.25,
         'initial gizmo size': 200,
         'prefer thumbnails': True,
+        'lazy thumbnails rendering': False,
     }
 
     MODEL_ROW_INTERN = 1001
@@ -208,7 +209,8 @@ class PDFsnip:
                                    float,           # 8.Crop left
                                    float,           # 9.Crop right
                                    float,           # 10.Crop top
-                                   float)           # 11.Crop bottom
+                                   float,           # 11.Crop bottom
+                                   bool)            # 12.Need to be rendered
 
         self.zoom_scale = self.prefs['initial zoom scale']
         self.gizmo_size = self.prefs['initial gizmo size']
@@ -254,6 +256,9 @@ class PDFsnip:
         for state in (gtk.STATE_NORMAL, gtk.STATE_PRELIGHT, gtk.STATE_ACTIVE):
             style.base[state] = style_sw.bg[gtk.STATE_NORMAL]
         self.iconview.set_style(style)
+
+        if self.prefs['lazy thumbnails rendering']:
+            self.iconview.connect_object('expose-event', self.__on_iconview_visibility_change, self.iconview)
 
 #        self.iconview.set_margin(0)
 
@@ -373,7 +378,7 @@ class PDFsnip:
 
         title += ' - PdfSnip'
         self.window.set_title(title)
-        print "retitle():", title
+#        print "retitle():", title
 
 
     def create_main_menu(self, window):
@@ -410,7 +415,7 @@ class PDFsnip:
         self.redraw_thumbnails()
 
     def update_progress_bar(self, object, fraction, text):
-        print "$$$$", fraction
+#        print "$$$$", fraction
         self.progress_bar.set_fraction(fraction)
         self.progress_bar.set_text(text)
         if fraction == 1.0:
@@ -432,6 +437,24 @@ class PDFsnip:
         self.rendering_thread.set_width(self.gizmo_size)
         self.redraw_thumbnails()
 
+    def __on_iconview_visibility_change(self, view, *args):
+        print "__update_visibility", view, args
+        vrange = self.iconview.get_visible_range()
+        if vrange is None:
+            return
+        start, end = vrange
+        print vrange, start[0], end[0]
+
+        for i in range(start[0], end[0] + 1):
+            print "--", i, self.model[i]
+            if self.model[i][12] == False:
+                self.model[i][12] = True
+
+        if self.rendering_thread.paused:
+            self.rendering_thread.paused = False
+            self.rendering_thread.evnt.set()
+            self.rendering_thread.evnt.clear()
+
     # =======================================================
     def on_window_size_request(self, window, event):
         """Main Window resize - workaround for autosetting of
@@ -439,6 +462,7 @@ class PDFsnip:
 
         #add 12 because of: http://bugzilla.gnome.org/show_bug.cgi?id=570152
 
+#        col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + 12))
         col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
 #        col_num = (window.get_size()[0] - self.iconview.get_column_spacing() * 2) / ((self.iv_col_width + self.iconview.get_spacing() * 2 + self.iconview.get_margin() * 2))
 #        print "on_window_size_request", 9 * window.get_size()[0], (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2)), 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
@@ -528,12 +552,13 @@ class PDFsnip:
                                thumbnail,               # 1
                                pdfdoc.nfile,            # 2
                                npage,                   # 3
-                               width,                   # 4
+                               0,                   # 4
                                pdfdoc.filename,         # 5
                                False,                   # 6
                                angle,                   # 7
                                crop[0],crop[1],         # 8-9
-                               crop[2],crop[3]       )) # 10-11
+                               crop[2],crop[3],         # 10-11
+                               not self.prefs['lazy thumbnails rendering']       ))           # 12
             res = True
 
         gobject.idle_add(self.retitle)
@@ -585,12 +610,13 @@ class PDFsnip:
                                thumbnail,               # 1
                                pdfdoc.nfile,            # 2
                                npage,                   # 3
-                               width,                   # 4
+                               width / 2,                   # 4
                                pdfdoc.filename,         # 5
                                False,                   # 6
                                angle,                   # 7
                                crop[0],crop[1],         # 8-9
-                               crop[2],crop[3]       )) # 10-11
+                               crop[2],crop[3],         # 10-11
+                               not self.prefs['lazy thumbnails rendering']       ))           # 12
             res = True
 
         gobject.idle_add(self.retitle)
@@ -1233,8 +1259,9 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             for row in self.model:
                 if self.quit:
                     break
+                print "$+$+$+$+$+$+$+$"
                 page_num = page_num + 1
-                if not row[6]:
+                if not row[6] and row[12]:
                     rendered_all = False
 #                    gtk.gdk.threads_enter() # Overusing of threads_enter for models
                     try:
@@ -1320,7 +1347,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, pix_w , pix_h)
 
-            print "render_to_pixbuf", pix_w, pix_h, pix_scale
+#            print "render_to_pixbuf", pix_w, pix_h, pix_scale
             page.render_to_pixbuf(0,0,pix_w,pix_h, pix_scale, 0, thumbnail)
 
             if self.antialiazing:
