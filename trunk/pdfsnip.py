@@ -411,8 +411,9 @@ class PDFsnip:
     def toggle_use_thumbnails(self, window, event):
         self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
         self.prefs['prefer thumbnails'] = event.get_active()
-        self.rendering_thread.set_prefer_thumbnails(event.get_active())
-        self.redraw_thumbnails()
+        if hasattr(self, 'rendering_thread'):
+            self.rendering_thread.set_prefer_thumbnails(event.get_active())
+            self.redraw_thumbnails()
 
     def update_progress_bar(self, object, fraction, text):
 #        print "$$$$", fraction
