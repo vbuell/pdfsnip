@@ -125,6 +125,8 @@ class PDFsnip:
    	            ( "/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None ),
    	            ( "/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None ),
    	            ( "/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None ),
+   	            ( "/_Edit/sep2",         None,         None, 0, "<Separator>" ),
+   	            ( "/_Edit/Preferences...",     None,         self.preferences_dialog, 0, None ),
    	            ( "/_View/Use thumbnails when possible",     None, self.toggle_use_thumbnails, 0, "<ToggleItem>" ),
    	            ( "/_View/Zoom In",     None,         self.set_zoom_in, 0, None ),
    	            ( "/_View/Zoom Out",    None,         self.set_zoom_out, 0, None ),
@@ -1095,7 +1097,7 @@ class PDFsnip:
             error_msg_win.destroy()
 
     # =======================================================
-    def crop_page_dialog(self, widget):
+    def crop_page_dialog(self, widget, data=None):
         """Opens a dialog box to define margins for page cropping"""
 
         model = self.iconview.get_model()
@@ -1159,6 +1161,13 @@ class PDFsnip:
                 self.rendering_thread.evnt.clear()
         elif result == gtk.RESPONSE_CANCEL:
             print(_('Dialog closed'))
+        dialog.destroy()
+
+    # =======================================================
+    def preferences_dialog(self, widget, data=None):
+        """Opens a preferences dialog box"""
+        dialog = PreferencesWindow(self.prefs)
+        dialog.run()
         dialog.destroy()
 
     # =======================================================
@@ -1281,9 +1290,10 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                         row[1] = thumbnail
                     finally:
                         pass
-#                       gtk.gdk.threads_leave()
-                    self.emit('update_progress_bar', float(page_num) / len(self.model),
-                        "Rendering thumbnails... [%s/%s]" % (page_num, len(self.model)))
+                        gtk.gdk.threads_enter()
+                        self.emit('update_progress_bar', float(page_num) / len(self.model),
+                            "Rendering thumbnails... [%s/%s]" % (page_num, len(self.model)))
+                        gtk.gdk.threads_leave()
             if rendered_all:
                 self.paused = True
                 if self.model.get_iter_first(): #just checking if model isn't empty
@@ -1510,6 +1520,70 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 
         return thumbnail
 
+
+class PreferencesWindow(gtk.Dialog):
+    """Displays global preference window"""
+
+    def __init__(self, config):
+        """ Initialize the Status window. """
+        super(PreferencesWindow, self).__init__(flags=gtk.DIALOG_MODAL)
+        self.set_title("Bazaar Preferences")
+        self.config = config
+        self._create()
+#        self.connect('delete_event', self.close)
+
+    def _create(self):
+        self.set_default_size(600, 600)
+        notebook = gtk.Notebook()
+        notebook.set_border_width(6)
+        notebook.insert_page(self._create_page_view(), gtk.Label("View"))
+#        notebook.insert_page(self._create_page_view(), gtk.Label("Something else"))
+        self.vbox.pack_start(notebook, True, True)
+        self.vbox.show_all()
+
+    def _create_page_view(self):
+        vbox = gtk.VBox()
+        vbox.set_border_width(12)
+
+        table = gtk.Table(rows=4, columns=2, homogeneous=False)
+        table.set_row_spacings(6)
+        table.set_col_spacings(6)
+
+        vbox.pack_start(table, True, True, 0)
+
+        align = gtk.Alignment(0.0, 0.5)
+        label = gtk.Label()
+        label.set_markup("<b>Default zoom level:</b>")
+        align.add(label)
+        table.attach(align, 0, 1, 0, 1, gtk.FILL, gtk.FILL)
+
+        align = gtk.Alignment(0.0, 0.5)
+        self.zoom = gtk.combo_box_new_text() # gtk.ComboBox()
+        align.add(self.zoom)
+        self.zoom.append_text(str(self.config['initial zoom scale']))
+        self.zoom.append_text("Rember last time")
+        table.attach(align, 1, 2, 0, 1, gtk.EXPAND | gtk.FILL, gtk.FILL)
+
+
+        self.use_thumbs = gtk.CheckButton()
+        self.use_thumbs.set_active(self.config['prefer thumbnails'])
+        self.use_thumbs.set_label("Use embedded thumbnails")
+        table.attach(self.use_thumbs, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
+
+
+        self.thumbs_lazy_rendering = gtk.CheckButton()
+        self.thumbs_lazy_rendering.set_active(self.config['lazy thumbnails rendering'])
+        self.thumbs_lazy_rendering.set_label("Lazy thumbnails rendering")
+        table.attach(self.thumbs_lazy_rendering, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+
+        return vbox
+
+    def display(self):
+        self.window.show_all()
+
+    def close(self, widget, event=None, data=None):
+        print "close"
+#        self.window.destroy()
 
 # =======================================================
 if __name__ == '__main__':
