@@ -1527,13 +1527,13 @@ class PreferencesWindow(gtk.Dialog):
     def __init__(self, config):
         """ Initialize the Status window. """
         super(PreferencesWindow, self).__init__(flags=gtk.DIALOG_MODAL)
-        self.set_title("Bazaar Preferences")
+        self.set_title("Preferences")
         self.config = config
         self._create()
 #        self.connect('delete_event', self.close)
 
     def _create(self):
-        self.set_default_size(600, 600)
+        self.set_default_size(300, 400)
         notebook = gtk.Notebook()
         notebook.set_border_width(6)
         notebook.insert_page(self._create_page_view(), gtk.Label("View"))
