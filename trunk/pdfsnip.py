@@ -339,11 +339,14 @@ class PDFsnip:
                            gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, ())
         gobject.signal_new('update_progress_bar', PDF_Renderer,
                            gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_FLOAT, gobject.TYPE_STRING])
+        gobject.signal_new('update_thumbnail', PDF_Renderer,
+                           gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_INT, gobject.TYPE_PYOBJECT])
         self.rendering_thread = PDF_Renderer(self.model, self.pdfqueue,
                                              0, self.gizmo_size)
 #                                             self.zoom_scale, self.gizmo_size)
         self.rendering_thread.connect('reset_iv_width', self.reset_iv_width)
         self.rendering_thread.connect('update_progress_bar', self.update_progress_bar)
+        self.rendering_thread.connect('update_thumbnail', self.update_thumbnail)
         self.rendering_thread.set_prefer_thumbnails(self.prefs['prefer thumbnails'])
         self.rendering_thread.daemon = True
         self.rendering_thread.start()
@@ -419,12 +422,21 @@ class PDFsnip:
 
     def update_progress_bar(self, object, fraction, text):
 #        print "$$$$", fraction
+        gtk.gdk.threads_enter()
         self.progress_bar.set_fraction(fraction)
         self.progress_bar.set_text(text)
         if fraction == 1.0:
             self.progress_bar.unrealize()
             self.progress_bar.hide_all()
+        gtk.gdk.threads_leave()
 
+    def update_thumbnail(self, object, num, thumbnail):
+        gtk.gdk.threads_enter()
+        row = self.model[num]
+        row[6] = True
+        row[4] = thumbnail.get_width()
+        row[1] = thumbnail
+        gtk.gdk.threads_leave()
 
     def set_zoom_in(self, window, event):
         """Zoom in icons view."""
@@ -1265,12 +1277,10 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
     def run(self):
         while not self.quit:
             rendered_all = True
-            page_num = 0
-            for row in self.model:
+            for idx, row in enumerate(self.model):
                 if self.quit:
                     break
                 print "$+$+$+$+$+$+$+$"
-                page_num = page_num + 1
                 if not row[6] and row[12]:
                     rendered_all = False
 #                    gtk.gdk.threads_enter() # Overusing of threads_enter for models
@@ -1285,15 +1295,18 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                         elif isinstance(pdfdoc, DJVU_Doc):
                             thumbnail = self.load_djvu_thumbnail(pdfdoc, npage, angle, crop)
 
-                        row[6] = True
-                        row[4] = thumbnail.get_width()
-                        row[1] = thumbnail
+                        self.emit('update_thumbnail', idx, thumbnail)
+#                        gtk.gdk.threads_enter()
+#                        row[6] = True
+#                        row[4] = thumbnail.get_width()
+#                        row[1] = thumbnail
                     finally:
                         pass
-                        gtk.gdk.threads_enter()
-                        self.emit('update_progress_bar', float(page_num) / len(self.model),
-                            "Rendering thumbnails... [%s/%s]" % (page_num, len(self.model)))
-                        gtk.gdk.threads_leave()
+#                        gtk.gdk.threads_enter()
+                        print "Rendering thumbnails... [%s/%s]" % (idx+1, len(self.model))
+                        self.emit('update_progress_bar', float(idx+1) / len(self.model),
+                            "Rendering thumbnails... [%s/%s]" % (idx+1, len(self.model)))
+#                        gtk.gdk.threads_leave()
             if rendered_all:
                 self.paused = True
                 if self.model.get_iter_first(): #just checking if model isn't empty
