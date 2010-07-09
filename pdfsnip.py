@@ -255,6 +255,8 @@ class PDFsnip:
             style.base[state] = style_sw.bg[gtk.STATE_NORMAL]
         self.iconview.set_style(style)
 
+#        self.iconview.set_margin(0)
+
 #        self.sw.add_with_viewport(self.iconview)
         self.sw.add(self.iconview)
 
@@ -329,7 +331,7 @@ class PDFsnip:
         gobject.signal_new('reset_iv_width', PDF_Renderer,
                            gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, ())
         gobject.signal_new('update_progress_bar', PDF_Renderer,
-                           gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_FLOAT])
+                           gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_FLOAT, gobject.TYPE_STRING])
         self.rendering_thread = PDF_Renderer(self.model, self.pdfqueue,
                                              0, self.gizmo_size)
 #                                             self.zoom_scale, self.gizmo_size)
@@ -407,9 +409,10 @@ class PDFsnip:
         self.rendering_thread.set_prefer_thumbnails(event.get_active())
         self.redraw_thumbnails()
 
-    def update_progress_bar(self, object, fraction):
+    def update_progress_bar(self, object, fraction, text):
         print "$$$$", fraction
         self.progress_bar.set_fraction(fraction)
+        self.progress_bar.set_text(text)
         if fraction == 1.0:
             self.progress_bar.unrealize()
             self.progress_bar.hide_all()
@@ -435,7 +438,11 @@ class PDFsnip:
            iconview cols no."""
 
         #add 12 because of: http://bugzilla.gnome.org/show_bug.cgi?id=570152
-        col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + 12))
+
+        col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
+#        col_num = (window.get_size()[0] - self.iconview.get_column_spacing() * 2) / ((self.iv_col_width + self.iconview.get_spacing() * 2 + self.iconview.get_margin() * 2))
+#        print "on_window_size_request", 9 * window.get_size()[0], (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2)), 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
+#        print "get_spacing", self.iconview.get_spacing(), "get_row_spacing", self.iconview.get_row_spacing(), "get_column_spacing", self.iconview.get_column_spacing(), "get_margin", self.iconview.get_margin()
         self.iconview.set_columns(col_num)
 
     # =======================================================
@@ -1247,7 +1254,8 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                     finally:
                         pass
 #                       gtk.gdk.threads_leave()
-                    self.emit('update_progress_bar', float(page_num) / len(self.model))
+                    self.emit('update_progress_bar', float(page_num) / len(self.model),
+                        "Rendering thumbnails... [%s/%s]" % (page_num, len(self.model)))
             if rendered_all:
                 self.paused = True
                 if self.model.get_iter_first(): #just checking if model isn't empty
