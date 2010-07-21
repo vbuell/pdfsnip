@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=PdfSnip
+Comment=Utility for splitting, rearrangement and modification of PDF documents
+Type=Application
+Exec=pdfsnip.py
+Icon=pdfsnip
+Categories=Office;
+Terminal=false
+StartupNotify=false
