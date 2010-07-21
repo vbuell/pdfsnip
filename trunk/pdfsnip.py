@@ -155,11 +155,8 @@ class PDFsnip:
         self.tmp_dir = tempfile.mkdtemp("pdfsnip")
         os.chmod(self.tmp_dir, 0700)
 
-        pixmap = os.path.join(sys.prefix,'share','pixmaps','pdfsnip.png')
-        try:
-            gtk.window_set_default_icon_from_file(pixmap)
-        except:
-            print(_('File %s does not exist') % pixmap)
+        icon_theme = gtk.icon_theme_get_default()
+        gtk.window_set_default_icon(icon_theme.load_icon("pdfsnip", 64, 0))
 
         self.is_dirty = False
 
@@ -173,7 +170,7 @@ class PDFsnip:
         self.window.set_default_size(self.prefs['window width'],
                                      self.prefs['window height'])
         self.window.connect('delete_event', self.close_application)
-        self.window.show()
+        self.window.show_all()
 
         # Create a vbox to hold the thumnails-container
         vbox = gtk.VBox()
@@ -1192,10 +1189,10 @@ class PDFsnip:
             pass
         # FIXME
         about_dialog.set_name('PdfSnip')
-        about_dialog.set_version('0.1')
+        about_dialog.set_version('0.0.10')
         about_dialog.set_comments(_(
-            'PdfSnip is an GTK+ based utility for splitting, rearrangement \
-            and modification of PDF documents.'))
+            'PdfSnip is an GTK+ based utility for splitting, rearrangement ' \
+            'and modification of PDF documents.'))
         about_dialog.set_authors(['Volodymyr Buell','Konstantinos Poulios',])
         about_dialog.set_website_label('http://code.google.com/p/pdfsnip/')
         about_dialog.set_logo_icon_name('pdfsnip')
