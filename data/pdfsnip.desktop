@@ -3,8 +3,11 @@ Version=1.0
 Name=PdfSnip
 Comment=Utility for splitting, rearrangement and modification of PDF documents
 Type=Application
-Exec=pdfsnip.py
+TryExec=pdfsnip.py
+Exec=pdfsnip.py %U
 Icon=pdfsnip
 Categories=Office;
 Terminal=false
 StartupNotify=false
+MimeType=application/pdf;application/x-bzpdf;application/x-gzpdf;
+
