@@ -99,6 +99,7 @@ class PDFsnip:
         'initial gizmo size': 200,
         'prefer thumbnails': True,
         'lazy thumbnails rendering': False,
+        'use pdftk': False,
     }
 
     MODEL_ROW_INTERN = 1001
@@ -641,7 +642,7 @@ class PDFsnip:
     def save_file(self, widget=None, data=None):
         if len(self.pdfqueue) == 1:
             print "len(self.pdfqueue)", len(self.pdfqueue)
-            self.export_to_file(self.pdfqueue[0].filename)
+            self.export_to_file_using_pypdf(self.pdfqueue[0].filename)
             self.set_dirty(False)
         else:
             error_msg_win = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
@@ -683,7 +684,7 @@ class PDFsnip:
                 if ext.lower() != '.pdf':
                     file_out = file_out + '.pdf'
                 try:
-                    self.export_to_file(file_out)
+                    self.export_to_file_using_pypdf(file_out)
                     self.export_directory = path
                 except IOError:
                     error_msg_win = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
@@ -697,12 +698,13 @@ class PDFsnip:
             break
         chooser.destroy()
 
-    def export_to_file(self, file_out):
+    def export_to_file_using_pypdf(self, file_out):
         """Export to file"""
 
         pdf_output = PdfFileWriter()
         pdf_input = []
         for pdfdoc in self.pdfqueue:
+            print "&&&& File: ", pdfdoc.copyname
             pdfdoc_inp = PdfFileReader(file(pdfdoc.copyname, 'rb'))
             if pdfdoc_inp.getIsEncrypted():
                 if (pdfdoc_inp.decrypt('')!=1): # Workaround for lp:#355479
@@ -752,6 +754,27 @@ class PDFsnip:
         # finally, write "output" to document-output.pdf
         print(_('exporting to:'), file_out)
         pdf_output.write(file(file_out, 'wb'))
+
+    def export_to_file_using_pdftk(self, file_out):
+        """Export to file using pdftk"""
+
+        import subprocess
+        if len(self.pdfqueue) > 1:
+            print("Currently saving don't work more than one file via pdftk. This will come next version. Keep tuned!")
+        else:
+            filename = self.pdfqueue[0].copyname
+            pages = [str(row[3]) for row in self.model]
+
+            args = ["pdftk", filename]
+            args.append("cat")
+            args += pages
+            args.append("output")
+            # finally, write "output" to document-output.pdf
+            args.append(file_out)
+
+            print args
+
+            subprocess.call(args)
 
     def on_action_add_doc_activate(self, widget, data=None):
         """Import doc"""
@@ -1513,9 +1536,10 @@ class PreferencesWindow(gtk.Dialog):
         """ Initialize the Status window. """
         super(PreferencesWindow, self).__init__(flags=gtk.DIALOG_MODAL)
         self.set_title("Preferences")
+        self.add_buttons(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_OK, gtk.RESPONSE_OK)
         self.config = config
         self._create()
-#        self.connect('delete_event', self.close)
+        self.connect('response', self.close)
 
     def _create(self):
         self.set_default_size(300, 400)
@@ -1577,16 +1601,15 @@ class PreferencesWindow(gtk.Dialog):
         align.add(label)
         table.attach(align, 0, 2, 0, 1, gtk.FILL, gtk.FILL)
 
-        use_pypdf = gtk.RadioButton()
-        use_pypdf.set_active(True)
-        use_pypdf.set_label("PyPDF")
-        table.attach(use_pypdf, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
+        self.use_pypdf = gtk.RadioButton()
+        self.use_pypdf.set_active(not self.config['use pdftk'])
+        self.use_pypdf.set_label("PyPDF")
+        table.attach(self.use_pypdf, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
 
-        use_pdftk = gtk.RadioButton(use_pypdf)
-        use_pdftk.set_active(False)
-        use_pdftk.set_state(False)
-        use_pdftk.set_label("pdftk")
-        table.attach(use_pdftk, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+        self.use_pdftk = gtk.RadioButton(self.use_pypdf)
+        self.use_pdftk.set_active(self.config['use pdftk'])
+        self.use_pdftk.set_label("pdftk")
+        table.attach(self.use_pdftk, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
 
         return vbox
 
@@ -1594,8 +1617,11 @@ class PreferencesWindow(gtk.Dialog):
         self.window.show_all()
 
     def close(self, widget, event=None, data=None):
-        print "close"
-#        self.window.destroy()
+        if event == gtk.RESPONSE_OK:
+            # Push settings back
+            self.config['use pdftk'] = self.use_pdftk.get_active()
+            self.config['prefer thumbnails'] = self.use_thumbs.get_active()
+            self.config['lazy thumbnails rendering'] = self.thumbs_lazy_rendering.get_active()
 
 
 if __name__ == '__main__':
