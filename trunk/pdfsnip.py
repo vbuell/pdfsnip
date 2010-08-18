@@ -128,6 +128,10 @@ class PDFsnip:
    	            ("/File/File _Info",   None,         self.file_info, 0, None),
    	            ("/File/sep1",         None,         None, 0, "<Separator>"),
    	            ("/File/Quit",         "<control>Q", self.close_application, 0, None),
+
+                ("/_Edit/Undo",      None,     self.on_undo, 0, None),
+                ("/_Edit/Redo",      None,     self.on_redo, 0, None),
+
    	            ("/_Edit/Delete",      "Delete",     self.clear_selected, 0, None),
    	            ("/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None),
    	            ("/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None),
@@ -166,12 +170,18 @@ class PDFsnip:
         except Exception, e:
             print e
 
+        # Create Undo/Redo stack
+        self.undo_stack = UndoRedoStack()
+
         # Create the temporary directory
         self.tmp_dir = tempfile.mkdtemp("pdfsnip")
         os.chmod(self.tmp_dir, 0700)
 
-        icon_theme = gtk.icon_theme_get_default()
-        gtk.window_set_default_icon(icon_theme.load_icon("pdfsnip", 64, 0))
+        try:
+            icon_theme = gtk.icon_theme_get_default()
+            gtk.window_set_default_icon(icon_theme.load_icon("pdfsnip", 64, 0))
+        except:
+            print "Can't load icon. Application isn't installed correctly."
 
         self.is_dirty = False
 
@@ -187,7 +197,7 @@ class PDFsnip:
         self.window.connect('delete_event', self.close_application)
         self.window.show_all()
 
-        # Create a vbox to hold the thumnails-container
+        # Create a vbox to hold the thumbnails-container
         vbox = gtk.VBox()
         self.window.add(vbox)
 
@@ -375,6 +385,12 @@ class PDFsnip:
             elif self.ext.lower() == '.pdf':
                 self.add_pdf_pages(filename)
 
+
+    def on_undo(self):
+        pass
+
+    def on_redo(self):
+        pass
 
     def set_dirty(self, flag):
         self.is_dirty = flag
@@ -1639,6 +1655,44 @@ class PreferencesWindow(gtk.Dialog):
             self.config['use pdftk'] = self.use_pdftk.get_active()
             self.config['prefer thumbnails'] = self.use_thumbs.get_active()
             self.config['lazy thumbnails rendering'] = self.thumbs_lazy_rendering.get_active()
+
+
+class UndoRedoStack():
+    def __init__(self):
+        self.stack = []
+
+    def undo(self):
+        action = self.stack.pop()
+        action.undo()
+
+    def do(self, action):
+        self.stack.append(action)
+        action.do()
+
+
+class Action:
+    pass
+
+
+class PageDeleteAction(Action):
+    def __init__(self, object, before_idx, after_idx, postAction=None):
+        self.name = "Delete page"
+        self.object = object
+        self.before = before_idx
+        self.after = after_idx
+        self.postAction = postAction
+
+    def do(self):
+        self.object.delete(self.after)
+        if self.postAction:
+            self.postAction()
+        return True
+
+    def undo(self):
+        self.object.add(self.before)
+        if self.postAction:
+            self.postAction()
+        return True
 
 
 if __name__ == '__main__':
