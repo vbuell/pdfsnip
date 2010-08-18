@@ -68,11 +68,19 @@ import cairo
 
 try:
     import djvu.decode
+    found_djvu = True
 except:
+    found_djvu = False
     print("python-djvulibre wasn't found. Djvu is disabled.")
 
 import poppler      #for the rendering of pdf pages
-from pyPdf import PdfFileWriter, PdfFileReader
+try:
+    from pyPdf import PdfFileWriter, PdfFileReader
+    found_pypdf = True
+except:
+    found_pypdf = False
+    print("pyPdf wasn't found. Document saving is disabled.")
+
 
 ROOT_DIR = '/apps/pdfsnip'
 
@@ -1156,9 +1164,7 @@ class PDFsnip:
         result = dialog.run()
 
         if result == gtk.RESPONSE_OK:
-            crop = []
-            for side in spin_list:
-                crop.append( side.get_value()/100. )
+            crop = [side.get_value()/100. for side in spin_list]
             for path in selection:
                 iter = model.get_iter(path)
                 for it in range(4):
@@ -1547,7 +1553,7 @@ class PreferencesWindow(gtk.Dialog):
         notebook = gtk.Notebook()
         notebook.set_border_width(6)
         notebook.insert_page(self._create_page_view(), gtk.Label("View"))
-#        notebook.insert_page(self._create_page_view(), gtk.Label("Something else"))
+        notebook.insert_page(self._create_page_engine(), gtk.Label("PDF engine"))
         self.vbox.pack_start(notebook, True, True)
         self.vbox.show_all()
 
@@ -1574,17 +1580,44 @@ class PreferencesWindow(gtk.Dialog):
         self.zoom.append_text("Rember last time")
         table.attach(align, 1, 2, 0, 1, gtk.EXPAND | gtk.FILL, gtk.FILL)
 
-
         self.use_thumbs = gtk.CheckButton()
         self.use_thumbs.set_active(self.config['prefer thumbnails'])
         self.use_thumbs.set_label("Use embedded thumbnails")
         table.attach(self.use_thumbs, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
 
-
         self.thumbs_lazy_rendering = gtk.CheckButton()
         self.thumbs_lazy_rendering.set_active(self.config['lazy thumbnails rendering'])
         self.thumbs_lazy_rendering.set_label("Lazy thumbnails rendering")
         table.attach(self.thumbs_lazy_rendering, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+
+        return vbox
+
+    def _create_page_engine(self):
+        vbox = gtk.VBox()
+        vbox.set_border_width(12)
+
+        table = gtk.Table(rows=4, columns=2, homogeneous=False)
+        table.set_row_spacings(6)
+        table.set_col_spacings(6)
+
+        vbox.pack_start(table, True, True, 0)
+
+        align = gtk.Alignment(0.0, 0.5)
+        label = gtk.Label()
+        label.set_markup("<b>Engine:</b>")
+        align.add(label)
+        table.attach(align, 0, 2, 0, 1, gtk.FILL, gtk.FILL)
+
+        use_pypdf = gtk.RadioButton()
+        use_pypdf.set_active(True)
+        use_pypdf.set_label("PyPDF")
+        table.attach(use_pypdf, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
+
+        use_pdftk = gtk.RadioButton(use_pypdf)
+        use_pdftk.set_active(False)
+        use_pdftk.set_state(False)
+        use_pdftk.set_label("pdftk")
+        table.attach(use_pdftk, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
 
         return vbox
 
