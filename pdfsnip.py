@@ -49,10 +49,10 @@ try:
 except AssertionError:
     print('You do not have the required versions of GTK+ and/or PyGTK ' +
           'installed.\n\n' +
-          'Installed GTK+ version is ' + 
+          'Installed GTK+ version is ' +
           '.'.join([str(n) for n in gtk.gtk_version]) + '\n' +
           'Required GTK+ version is 2.10.0 or higher\n\n'
-          'Installed PyGTK version is ' + 
+          'Installed PyGTK version is ' +
           '.'.join([str(n) for n in gtk.pygtk_version]) + '\n' +
           'Required PyGTK version is 2.10.0 or higher')
     sys.exit(1)
@@ -90,8 +90,8 @@ KEY_WINDOW_HEIGHT = ROOT_DIR + '/ui_height'
 
 class PDFsnip:
     prefs = {
-        'window width': min (700, gtk.gdk.screen_get_default().get_width() / 2 ),
-        'window height': min(600, gtk.gdk.screen_get_default().get_height() - 50 ),
+        'window width': min(700, gtk.gdk.screen_get_default().get_width() / 2),
+        'window height': min(600, gtk.gdk.screen_get_default().get_height() - 50),
         'window x': 0,
         'window y': 0,
         'initial thumbnail size': 300,
@@ -116,28 +116,28 @@ class PDFsnip:
         self.menu_items = (
                     # path,                 accelerator,  callback, params, type
                     # type := {<Title>,<Item>,<CheckItem>,<ToggleItem>,<RadioItem>,<Separator>,<Branch>,<LastBranch>}
-   	            ( "/_File",             None,         None, 0, "<Branch>" ),
-#   	            ( "/File/_New",         "<control>N", self.about_dialog, 0, None ),
-#   	            ( "/File/_Open",        "<control>O", self.about_dialog, 0, None ),
-   	            ( "/File/_Append",      "<control>I", self.on_action_add_doc_activate, 0, None ),
-   	            ( "/File/_Save",        "<control>S", self.save_file, 0, None ),
-   	            ( "/File/Save _As...",  None,         self.choose_export_pdf_name, 0, None ),
-   	            ( "/File/sep1",         None,         None, 0, "<Separator>" ),
-   	            ( "/File/File _Info",   None,         self.file_info, 0, None ),
-   	            ( "/File/sep1",         None,         None, 0, "<Separator>" ),
-   	            ( "/File/Quit",         "<control>Q", self.close_application, 0, None ),
-   	            ( "/_Edit/Delete",      "Delete",     self.clear_selected, 0, None ),
-   	            ( "/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None ),
-   	            ( "/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None ),
-   	            ( "/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None ),
-   	            ( "/_Edit/sep2",         None,         None, 0, "<Separator>" ),
-   	            ( "/_Edit/Preferences...",     None,         self.preferences_dialog, 0, None ),
-   	            ( "/_View/Use thumbnails when possible",     None, self.toggle_use_thumbnails, 0, "<ToggleItem>" ),
-   	            ( "/_View/Zoom In",     None,         self.set_zoom_in, 0, None ),
-   	            ( "/_View/Zoom Out",    None,         self.set_zoom_out, 0, None ),
-   	            ( "/_View/Zoom To Width", "<control>0", None, 0, None ),
-#   	            ( "/_Tools/Add thumbnails to file",   None,  None, 0, None ),
-   	            ( "/_Help/About",       None,         self.about_dialog, 0, None ),
+   	            ("/_File",             None,         None, 0, "<Branch>"),
+#   	            ("/File/_New",         "<control>N", self.about_dialog, 0, None),
+#   	            ("/File/_Open",        "<control>O", self.about_dialog, 0, None),
+   	            ("/File/_Append",      "<control>I", self.on_action_add_doc_activate, 0, None),
+   	            ("/File/_Save",        "<control>S", self.save_file, 0, None),
+   	            ("/File/Save _As...",  None,         self.choose_export_pdf_name, 0, None),
+   	            ("/File/sep1",         None,         None, 0, "<Separator>"),
+   	            ("/File/File _Info",   None,         self.file_info, 0, None),
+   	            ("/File/sep1",         None,         None, 0, "<Separator>"),
+   	            ("/File/Quit",         "<control>Q", self.close_application, 0, None),
+   	            ("/_Edit/Delete",      "Delete",     self.clear_selected, 0, None),
+   	            ("/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None),
+   	            ("/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None),
+   	            ("/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None),
+   	            ("/_Edit/sep2",         None,         None, 0, "<Separator>"),
+   	            ("/_Edit/Preferences...",     None,         self.preferences_dialog, 0, None),
+   	            ("/_View/Use thumbnails when possible",     None, self.toggle_use_thumbnails, 0, "<ToggleItem>"),
+   	            ("/_View/Zoom In",     None,         self.set_zoom_in, 0, None),
+   	            ("/_View/Zoom Out",    None,         self.set_zoom_out, 0, None),
+   	            ("/_View/Zoom To Width", "<control>0", None, 0, None),
+#   	            ("/_Tools/Add thumbnails to file",   None,  None, 0, None),
+   	            ("/_Help/About",       None,         self.about_dialog, 0, None),
    	            )
         # GConf stuff
         self.gconf_client = gconf.client_get_default()
@@ -196,7 +196,7 @@ class PDFsnip:
                               gtk.DEST_DEFAULT_MOTION,
                               self.TARGETS_SW,
                               gtk.gdk.ACTION_COPY |
-                              gtk.gdk.ACTION_MOVE )
+                              gtk.gdk.ACTION_MOVE)
         self.sw.connect('drag_data_received', self.sw_dnd_received_data)
         self.sw.connect('button_press_event', self.sw_button_press_event)
         vbox.pack_start(self.sw, True, True, 0)
@@ -242,7 +242,7 @@ class PDFsnip:
         self.iconview.enable_model_drag_source(gtk.gdk.BUTTON1_MASK,
                                                self.TARGETS_IV,
                                                gtk.gdk.ACTION_COPY |
-                                               gtk.gdk.ACTION_MOVE )
+                                               gtk.gdk.ACTION_MOVE)
         self.iconview.enable_model_drag_dest(self.TARGETS_IV,
                                              gtk.gdk.ACTION_DEFAULT)
         self.iconview.connect('drag_begin', self.iv_drag_begin)
@@ -369,7 +369,7 @@ class PDFsnip:
     def set_dirty(self, flag):
         self.is_dirty = flag
         gobject.idle_add(self.retitle)
-        
+
 
     def retitle(self):
         title = ""
@@ -442,7 +442,7 @@ class PDFsnip:
 
     def set_zoom_in(self, window, event):
         """Zoom in icons view."""
-        
+
         self.gizmo_size = self.gizmo_size * 2
         self.rendering_thread.set_width(self.gizmo_size)
         self.redraw_thumbnails()
@@ -524,7 +524,7 @@ class PDFsnip:
 
     def add_djvu_pages(self, filename,
                             firstpage=None, lastpage=None,
-                            angle=0, crop=[0.,0.,0.,0.]   ):
+                            angle=0, crop=[0.,0.,0.,0.]):
         """Add pages of a pdf document to the model"""
 
         print "add_djvu_pages"
@@ -571,7 +571,7 @@ class PDFsnip:
                                angle,                   # 7
                                crop[0],crop[1],         # 8-9
                                crop[2],crop[3],         # 10-11
-                               not self.prefs['lazy thumbnails rendering']       ))           # 12
+                               not self.prefs['lazy thumbnails rendering']))           # 12
             res = True
 
         gobject.idle_add(self.retitle)
@@ -583,7 +583,7 @@ class PDFsnip:
 
     def add_pdf_pages(self, filename,
                             firstpage=None, lastpage=None,
-                            angle=0, crop=[0.,0.,0.,0.]   ):
+                            angle=0, crop=[0.,0.,0.,0.]):
         """Add pages of a pdf document to the model"""
 
         res = False
@@ -628,7 +628,7 @@ class PDFsnip:
                                angle,                   # 7
                                crop[0],crop[1],         # 8-9
                                crop[2],crop[3],         # 10-11
-                               not self.prefs['lazy thumbnails rendering']       ))           # 12
+                               not self.prefs['lazy thumbnails rendering']))           # 12
             res = True
 
         gobject.idle_add(self.retitle)
@@ -726,7 +726,7 @@ class PDFsnip:
             if angle is not 0:
                 current_page.rotateClockwise(angle)
             if crop != [0.,0.,0.,0.]:
-                rotate_times = ( ( ( angle + angle0 ) % 360 + 45 ) / 90 ) % 4
+                rotate_times = (((angle + angle0) % 360 + 45) / 90) % 4
                 crop_init = crop
                 if rotate_times is not 0:
                     perm = [0,2,1,3]
@@ -738,10 +738,10 @@ class PDFsnip:
                 #(x2, y2) = current_page.cropBox.upperRight
                 (x1, y1) = [float(xy) for xy in current_page.mediaBox.lowerLeft]
                 (x2, y2) = [float(xy) for xy in current_page.mediaBox.upperRight]
-                x1_new = int( x1 + (x2-x1) * crop[0] )
-                x2_new = int( x2 - (x2-x1) * crop[1] )
-                y1_new = int( y1 + (y2-y1) * crop[3] )
-                y2_new = int( y2 - (y2-y1) * crop[2] )
+                x1_new = int(x1 + (x2-x1) * crop[0])
+                x2_new = int(x2 - (x2-x1) * crop[1])
+                y1_new = int(y1 + (y2-y1) * crop[3])
+                y2_new = int(y2 - (y2-y1) * crop[2])
                 #current_page.cropBox.lowerLeft = (x1_new, y1_new)
                 #current_page.cropBox.upperRight = (x2_new, y2_new)
                 current_page.mediaBox.lowerLeft = (x1_new, y1_new)
@@ -835,7 +835,7 @@ class PDFsnip:
         data = []
         for path in selection:
             if selection_data.target == 'MODEL_ROW_INTERN':
-                data.append( str(path[0]) )
+                data.append(str(path[0]))
             elif selection_data.target == 'MODEL_ROW_EXTERN':
                 iter = model.get_iter(path)
                 nfile, npage, angle = model.get(iter, 2, 3, 7)
@@ -843,8 +843,8 @@ class PDFsnip:
                 pdfdoc = self.pdfqueue[nfile - 1]
                 data.append('\n'.join([pdfdoc.filename,
                                        str(npage),
-                                       str(angle)      ] +
-                                       [str(side) for side in crop] ) )
+                                       str(angle)] +
+                                       [str(side) for side in crop]))
         if data:
             data = '\n;\n'.join(data)
             selection_data.set(selection_data.target, 8, data)
@@ -869,7 +869,7 @@ class PDFsnip:
                     path = row.path
                     ref_to = gtk.TreeRowReference(model,path)
             if ref_to:
-                before = (   position == gtk.ICON_VIEW_DROP_LEFT
+                before = (position == gtk.ICON_VIEW_DROP_LEFT
                           or position == gtk.ICON_VIEW_DROP_ABOVE)
                 #if target_id == self.MODEL_ROW_INTERN:
                 if selection_data.target == 'MODEL_ROW_INTERN':
@@ -894,7 +894,7 @@ class PDFsnip:
                             path = ref_from.get_path()
                             iter_from = model.get_iter(path)
                             model.remove(iter_from)
-                        
+
                 #elif target_id == self.MODEL_ROW_EXTERN:
                 elif selection_data.target == 'MODEL_ROW_EXTERN':
                     if not before:
@@ -905,7 +905,7 @@ class PDFsnip:
                         npage, angle = [int(k) for k in tmp[1:3]]
                         crop = [float(side) for side in tmp[3:7]]
                         if self.add_pdf_pages(filename, npage, npage,
-                                                        angle, crop  ):
+                                                        angle, crop):
                             if len(model) > 0:
                                 path = ref_to.get_path()
                                 iter_to = model.get_iter(path)
@@ -964,10 +964,10 @@ class PDFsnip:
         sw_vpos = sw_vadj.get_value()
         if self.iv_auto_scroll_direction == gtk.DIR_UP:
             sw_vpos -= sw_vadj.step_increment
-            sw_vadj.set_value( max(sw_vpos, sw_vadj.lower) )
+            sw_vadj.set_value(max(sw_vpos, sw_vadj.lower))
         elif self.iv_auto_scroll_direction == gtk.DIR_DOWN:
             sw_vpos += sw_vadj.step_increment
-            sw_vadj.set_value( min(sw_vpos, sw_vadj.upper - sw_vadj.page_size) )
+            sw_vadj.set_value(min(sw_vpos, sw_vadj.upper - sw_vadj.page_size))
         return True  #call me again
 
     def iv_button_press_event(self, iconview, event):
@@ -984,7 +984,7 @@ class PDFsnip:
                     iconview.unselect_all()
                 iconview.select_path(path)
                 iconview.grab_focus()
-                self.popup.popup( None, None, None, event.button, time)
+                self.popup.popup(None, None, None, event.button, time)
             return 1
 
     def sw_dnd_received_data(self, scrolledwindow, context, x, y,
@@ -1035,10 +1035,10 @@ class PDFsnip:
 
     def rotate_page_right(self, widget, data=None):
         self.rotate_page(90)
-    
+
     def rotate_page_left(self, widget, data=None):
         self.rotate_page(-90)
-    
+
     def rotate_page(self, angle):
         """Rotates the selected page in the IconView"""
 
@@ -1051,7 +1051,7 @@ class PDFsnip:
             nfile = model.get_value(iter, 2)
             npage = model.get_value(iter, 3)
 
-            rotate_times = ( ( (-angle) % 360 + 45 ) / 90 ) % 4
+            rotate_times = (((-angle) % 360 + 45) / 90) % 4
             crop = [0.,0.,0.,0.]
             if rotate_times is not 0:
                 perm = [0,2,1,3]
@@ -1115,7 +1115,7 @@ class PDFsnip:
         frame.add(vbox)
 
         spin_list = []
-        units = 2 * [_('% of width')] + 2 * [_('% of height')] 
+        units = 2 * [_('% of width')] + 2 * [_('% of height')]
         for margin in (_('Left'),_('Right'),_('Top'),_('Bottom')):
             hbox = gtk.HBox(True, 0)
             vbox.pack_start(hbox, False, False, 5)
@@ -1397,7 +1397,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             return thumbnail
         except Exception, e:
             print "Type:", type(e), "Message:", e
-            
+
 
     def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
@@ -1412,10 +1412,10 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             pix_w = thumbnail.get_width()
             pix_h = thumbnail.get_height()
             if crop != [0.,0.,0.,0.]:
-                src_x = int( crop[0] * pix_w )
-                src_y = int( crop[2] * pix_h )
-                width = int( (1. - crop[0] - crop[1]) * pix_w )
-                height = int( (1. - crop[2] - crop[3]) * pix_h )
+                src_x = int(crop[0] * pix_w)
+                src_y = int(crop[2] * pix_h)
+                width = int((1. - crop[0] - crop[1]) * pix_w)
+                height = int((1. - crop[2] - crop[3]) * pix_h)
                 new_thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                                8, width, height)
                 thumbnail.copy_area(src_x, src_y, width, height,
@@ -1449,10 +1449,10 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             pix_w = thumbnail.get_width()
             pix_h = thumbnail.get_height()
             if crop != [0.,0.,0.,0.]:
-                src_x = int( crop[0] * pix_w )
-                src_y = int( crop[2] * pix_h )
-                width = int( (1. - crop[0] - crop[1]) * pix_w )
-                height = int( (1. - crop[2] - crop[3]) * pix_h )
+                src_x = int(crop[0] * pix_w)
+                src_y = int(crop[2] * pix_h)
+                width = int((1. - crop[0] - crop[1]) * pix_w)
+                height = int((1. - crop[2] - crop[3]) * pix_h)
                 new_thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                                8, width, height)
                 thumbnail.copy_area(src_x, src_y, width, height,
