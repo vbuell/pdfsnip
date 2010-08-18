@@ -89,9 +89,6 @@ KEY_WINDOW_WIDTH = ROOT_DIR + '/ui_width'
 KEY_WINDOW_HEIGHT = ROOT_DIR + '/ui_height'
 
 class PDFsnip:
-    # =======================================================
-    # All the preferences are stored here.
-    # =======================================================
     prefs = {
         'window width': min (700, gtk.gdk.screen_get_default().get_width() / 2 ),
         'window height': min(600, gtk.gdk.screen_get_default().get_height() - 50 ),
@@ -475,7 +472,6 @@ class PDFsnip:
             self.rendering_thread.evnt.set()
             self.rendering_thread.evnt.clear()
 
-    # =======================================================
     def on_window_size_request(self, window, event):
         """Main Window resize - workaround for autosetting of
            iconview cols no."""
@@ -489,7 +485,6 @@ class PDFsnip:
 #        print "get_spacing", self.iconview.get_spacing(), "get_row_spacing", self.iconview.get_row_spacing(), "get_column_spacing", self.iconview.get_column_spacing(), "get_margin", self.iconview.get_margin()
         self.iconview.set_columns(col_num)
 
-    # =======================================================
     def reset_iv_width(self, renderer=None):
         """Reconfigures the width of the iconview columns"""
 
@@ -506,7 +501,6 @@ class PDFsnip:
             self.iconview.set_item_width(self.iv_col_width + 12) #-1)
             self.on_window_size_request(self.window, None)
 
-    # =======================================================
     def close_application(self, widget, event=None, data=None):
         """Termination"""
 
@@ -528,7 +522,6 @@ class PDFsnip:
             sys.exit(0)
         return False
 
-    # =======================================================
     def add_djvu_pages(self, filename,
                             firstpage=None, lastpage=None,
                             angle=0, crop=[0.,0.,0.,0.]   ):
@@ -588,7 +581,6 @@ class PDFsnip:
             self.rendering_thread.evnt.clear()
         return res
 
-    # =======================================================
     def add_pdf_pages(self, filename,
                             firstpage=None, lastpage=None,
                             angle=0, crop=[0.,0.,0.,0.]   ):
@@ -661,7 +653,6 @@ class PDFsnip:
             if response == gtk.RESPONSE_OK:
                 error_msg_win.destroy()
 
-    # =======================================================
     def choose_export_pdf_name(self, widget=None, data=None):
         """Handles choosing a name for exporting """
 
@@ -706,7 +697,6 @@ class PDFsnip:
             break
         chooser.destroy()
 
-    # =======================================================
     def export_to_file(self, file_out):
         """Export to file"""
 
@@ -763,7 +753,6 @@ class PDFsnip:
         print(_('exporting to:'), file_out)
         pdf_output.write(file(file_out, 'wb'))
 
-    # =======================================================
     def on_action_add_doc_activate(self, widget, data=None):
         """Import doc"""
 
@@ -809,7 +798,6 @@ class PDFsnip:
         chooser.destroy()
         gobject.idle_add(self.retitle)
 
-    # =======================================================
     def clear_selected(self, button=None, data=None):
         """Removes the selected Element in the IconView"""
 
@@ -830,7 +818,6 @@ class PDFsnip:
                     self.iconview.select_path(path)
             self.iconview.grab_focus()
 
-    # =======================================================
     def iv_drag_begin(self, iconview, context):
         """Sets custom icon on drag begin for multiple items selected"""
 
@@ -838,8 +825,7 @@ class PDFsnip:
             iconview.stop_emission('drag_begin')
             context.set_icon_stock(gtk.STOCK_DND_MULTIPLE, 0, 0)
 
-    # =======================================================
-    def iv_dnd_get_data(self, iconview, context, 
+    def iv_dnd_get_data(self, iconview, context,
                         selection_data, target_id, etime):
         """Handles requests for data by drag and drop in iconview"""
 
@@ -863,8 +849,7 @@ class PDFsnip:
             data = '\n;\n'.join(data)
             selection_data.set(selection_data.target, 8, data)
 
-    # =======================================================
-    def iv_dnd_received_data(self, iconview, context, x, y, 
+    def iv_dnd_received_data(self, iconview, context, x, y,
                              selection_data, target_id, etime):
         """Handles received data by drag and drop in iconview"""
 
@@ -934,7 +919,6 @@ class PDFsnip:
                                 if context.action == gtk.gdk.ACTION_MOVE:
                                     context.finish(True, True, etime)
 
-    # =======================================================
     def iv_dnd_data_delete(self, widget, context):
         """Deletes dnd items after a successful move operation"""
 
@@ -946,7 +930,6 @@ class PDFsnip:
             iter = model.get_iter(path)
             model.remove(iter)
 
-    # =======================================================
     def iv_dnd_motion(self, iconview, context, x, y, etime):
         """Handles the drag-motion signal in order to auto-scroll the view"""
 
@@ -967,7 +950,6 @@ class PDFsnip:
             gobject.source_remove(self.iv_auto_scroll_timer)
             self.iv_auto_scroll_timer = None
 
-    # =======================================================
     def iv_dnd_leave_end(self, widget, context, ignored=None):
         """Ends the auto-scroll during DND"""
 
@@ -975,7 +957,6 @@ class PDFsnip:
             gobject.source_remove(self.iv_auto_scroll_timer)
             self.iv_auto_scroll_timer = None
 
-    # =======================================================
     def iv_auto_scroll(self):
         """Timeout routine for auto-scroll"""
 
@@ -989,7 +970,6 @@ class PDFsnip:
             sw_vadj.set_value( min(sw_vpos, sw_vadj.upper - sw_vadj.page_size) )
         return True  #call me again
 
-    # =======================================================
     def iv_button_press_event(self, iconview, event):
         """Manages mouse clicks on the iconview"""
 
@@ -1007,7 +987,6 @@ class PDFsnip:
                 self.popup.popup( None, None, None, event.button, time)
             return 1
 
-    # =======================================================
     def sw_dnd_received_data(self, scrolledwindow, context, x, y,
                              selection_data, target_id, etime):
         """Handles received data by drag and drop in scrolledwindow"""
@@ -1033,14 +1012,12 @@ class PDFsnip:
                 if os.path.isfile(filename): # is it file?
                     self.add_pdf_pages(filename)
 
-    # =======================================================
     def sw_button_press_event(self, scrolledwindow, event):
         """Unselects all items in iconview on mouse click in scrolledwindow"""
 
         if event.button == 1:
             self.iconview.unselect_all()
 
-    # =======================================================
     def get_file_path_from_dnd_dropped_uri(self, uri):
         """Extracts the path from an uri"""
 
@@ -1056,7 +1033,6 @@ class PDFsnip:
             path = path[5:]  # 5 is len('file:')
         return path
 
-    # =======================================================
     def rotate_page_right(self, widget, data=None):
         self.rotate_page(90)
     
@@ -1096,7 +1072,6 @@ class PDFsnip:
             self.rendering_thread.evnt.clear()
 
 
-    # =======================================================
     def file_info(self, widget, event):
         """Shows info about opened file(s)"""
 
@@ -1113,7 +1088,6 @@ class PDFsnip:
         if response == gtk.RESPONSE_OK:
             error_msg_win.destroy()
 
-    # =======================================================
     def crop_page_dialog(self, widget, data=None):
         """Opens a dialog box to define margins for page cropping"""
 
@@ -1178,14 +1152,12 @@ class PDFsnip:
             print(_('Dialog closed'))
         dialog.destroy()
 
-    # =======================================================
     def preferences_dialog(self, widget, data=None):
         """Opens a preferences dialog box"""
         dialog = PreferencesWindow(self.prefs)
         dialog.run()
         dialog.destroy()
 
-    # =======================================================
     def about_dialog(self, widget, data=None):
         about_dialog = gtk.AboutDialog()
         try:
@@ -1206,7 +1178,6 @@ class PDFsnip:
         about_dialog.connect('delete_event', lambda w, a: about_dialog.destroy())
         about_dialog.show_all()
 
-# =======================================================
 class PDF_Doc:
     """Class handling pdf documents"""
 
@@ -1254,7 +1225,6 @@ class DJVU_Doc:
 
 
 
-# =======================================================
 class PDF_Renderer(threading.Thread, gobject.GObject):
 
     def __init__(self, model, pdfqueue, scale=1., width=100):
@@ -1317,7 +1287,6 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 #                    gobject.idle_add(self.reset_iv_width)
                 self.evnt.wait()
 
-    # =======================================================
     def bbox_upscale(self, box, gizmo):
         pix_w, pix_h = box
         if pix_h > pix_w:
@@ -1628,7 +1597,7 @@ class PreferencesWindow(gtk.Dialog):
         print "close"
 #        self.window.destroy()
 
-# =======================================================
+
 if __name__ == '__main__':
     gtk.gdk.threads_init()
     PDFsnip()
