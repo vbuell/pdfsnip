@@ -87,6 +87,7 @@ ROOT_DIR = '/apps/pdfsnip'
 KEY_THUMBNAILS = ROOT_DIR + '/prefer_embedded_thumbnails'
 KEY_WINDOW_WIDTH = ROOT_DIR + '/ui_width'
 KEY_WINDOW_HEIGHT = ROOT_DIR + '/ui_height'
+KEY_USE_PDFTK = ROOT_DIR + '/use_pdftk'
 
 class PDFsnip:
     prefs = {
@@ -151,9 +152,17 @@ class PDFsnip:
             gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_HEIGHT))
             if gconf_value:
                 self.prefs['window height'] = gconf_value
-            gconf_value = int(self.gconf_client.get_bool(KEY_THUMBNAILS))
+            gconf_value = self.gconf_client.get_bool(KEY_THUMBNAILS)
             if isinstance(gconf_value, bool):
                 self.prefs['prefer thumbnails'] = gconf_value
+            else:
+                print "Not BOOL!!!!", gconf_value
+            gconf_value = self.gconf_client.get_bool(KEY_USE_PDFTK)
+            if isinstance(gconf_value, bool):
+                self.prefs['use pdftk'] = gconf_value
+            else:
+                print "Not BOOL!!!!", gconf_value
+            print "<< 'use pdftk'", self.prefs['use pdftk']
         except Exception, e:
             print e
 
@@ -508,6 +517,8 @@ class PDFsnip:
         # save configuration
         self.gconf_client.set_string(KEY_WINDOW_WIDTH, str(self.window.get_size()[0]))
         self.gconf_client.set_string(KEY_WINDOW_HEIGHT, str(self.window.get_size()[1]))
+        self.gconf_client.set_bool(KEY_USE_PDFTK, self.prefs['use pdftk'])
+        print ">> 'use pdftk'", self.prefs['use pdftk']
 
         #gtk.gdk.threads_leave()
         self.rendering_thread.quit = True
@@ -642,7 +653,10 @@ class PDFsnip:
     def save_file(self, widget=None, data=None):
         if len(self.pdfqueue) == 1:
             print "len(self.pdfqueue)", len(self.pdfqueue)
-            self.export_to_file_using_pypdf(self.pdfqueue[0].filename)
+            if not self.prefs['use pdftk']:
+                self.export_to_file_using_pypdf(self.pdfqueue[0].filename)
+            else:
+                self.export_to_file_using_pdftk(self.pdfqueue[0].filename)
             self.set_dirty(False)
         else:
             error_msg_win = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
@@ -684,7 +698,10 @@ class PDFsnip:
                 if ext.lower() != '.pdf':
                     file_out = file_out + '.pdf'
                 try:
-                    self.export_to_file_using_pypdf(file_out)
+                    if not self.prefs['use pdftk']:
+                        self.export_to_file_using_pypdf(file_out)
+                    else:
+                        self.export_to_file_using_pdftk(file_out)
                     self.export_directory = path
                 except IOError:
                     error_msg_win = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
