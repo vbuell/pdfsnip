@@ -88,6 +88,7 @@ KEY_THUMBNAILS = ROOT_DIR + '/prefer_embedded_thumbnails'
 KEY_WINDOW_WIDTH = ROOT_DIR + '/ui_width'
 KEY_WINDOW_HEIGHT = ROOT_DIR + '/ui_height'
 KEY_USE_PDFTK = ROOT_DIR + '/use_pdftk'
+KEY_THUMBNAILS_SIZE = ROOT_DIR + '/thumbnails_size'
 
 class PDFsnip:
     prefs = {
@@ -150,6 +151,9 @@ class PDFsnip:
         self.gconf_client.add_dir(ROOT_DIR, gconf.CLIENT_PRELOAD_NONE)
 
         try:
+            gconf_value = int(self.gconf_client.get_string(KEY_THUMBNAILS_SIZE))
+            if gconf_value:
+                self.prefs['initial gizmo size'] = gconf_value
             gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_WIDTH))
             if gconf_value:
                 self.prefs['window width'] = gconf_value
@@ -534,6 +538,8 @@ class PDFsnip:
         self.gconf_client.set_string(KEY_WINDOW_WIDTH, str(self.window.get_size()[0]))
         self.gconf_client.set_string(KEY_WINDOW_HEIGHT, str(self.window.get_size()[1]))
         self.gconf_client.set_bool(KEY_USE_PDFTK, self.prefs['use pdftk'])
+        self.gconf_client.set_string(KEY_THUMBNAILS_SIZE, str(self.prefs['initial gizmo size']))
+
         print ">> 'use pdftk'", self.prefs['use pdftk']
 
         #gtk.gdk.threads_leave()
@@ -1602,7 +1608,10 @@ class PreferencesWindow(gtk.Dialog):
         align = gtk.Alignment(0.0, 0.5)
         self.zoom = gtk.combo_box_new_text() # gtk.ComboBox()
         align.add(self.zoom)
-        self.zoom.append_text(str(self.config['initial zoom scale']))
+        self.zoom.append_text("100")
+        self.zoom.append_text("200")
+        self.zoom.append_text("300")
+        self.zoom.append_text("400")
         self.zoom.append_text("Rember last time")
         table.attach(align, 1, 2, 0, 1, gtk.EXPAND | gtk.FILL, gtk.FILL)
 
@@ -1655,6 +1664,8 @@ class PreferencesWindow(gtk.Dialog):
             self.config['use pdftk'] = self.use_pdftk.get_active()
             self.config['prefer thumbnails'] = self.use_thumbs.get_active()
             self.config['lazy thumbnails rendering'] = self.thumbs_lazy_rendering.get_active()
+#            print self.zoom.__dict__
+#            self.config['initial gizmo size'] = int(self.zoom.get_text())
 
 
 class UndoRedoStack():
