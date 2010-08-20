@@ -390,10 +390,10 @@ class PDFsnip:
                 self.add_pdf_pages(filename)
 
 
-    def on_undo(self):
+    def on_undo(self, window, event):
         pass
 
-    def on_redo(self):
+    def on_redo(self, window, event):
         pass
 
     def set_dirty(self, flag):
@@ -473,6 +473,7 @@ class PDFsnip:
     def set_zoom_in(self, window, event):
         """Zoom in icons view."""
 
+        print "set_zoom_in"
         self.gizmo_size = self.gizmo_size * 2
         self.rendering_thread.set_width(self.gizmo_size)
         self.redraw_thumbnails()
@@ -480,6 +481,7 @@ class PDFsnip:
     def set_zoom_out(self, window, event):
         """Zoom out icons view."""
 
+        print "set_zoom_out"
         self.gizmo_size = self.gizmo_size / 2
         self.rendering_thread.set_width(self.gizmo_size)
         self.redraw_thumbnails()
@@ -879,6 +881,12 @@ class PDFsnip:
                     path = row.path
                     self.iconview.select_path(path)
             self.iconview.grab_focus()
+
+        if self.rendering_thread.paused:
+            self.rendering_thread.paused = False
+            self.rendering_thread.evnt.set()
+            self.rendering_thread.evnt.clear()
+            
 
     def iv_drag_begin(self, iconview, context):
         """Sets custom icon on drag begin for multiple items selected"""
@@ -1312,7 +1320,13 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
     def run(self):
         while not self.quit:
             rendered_all = True
-            for idx, row in enumerate(self.model):
+#            for idx, row in enumerate(self.model):
+            for idx in range(len(self.model)):
+                try:
+                    row = self.model[idx]
+                except Exception, e:
+                    print "Exception: ", e
+                    break
                 if self.quit:
                     break
                 print "$+$+$+$+$+$+$+$"
@@ -1664,8 +1678,7 @@ class PreferencesWindow(gtk.Dialog):
             self.config['use pdftk'] = self.use_pdftk.get_active()
             self.config['prefer thumbnails'] = self.use_thumbs.get_active()
             self.config['lazy thumbnails rendering'] = self.thumbs_lazy_rendering.get_active()
-#            print self.zoom.__dict__
-#            self.config['initial gizmo size'] = int(self.zoom.get_text())
+            self.config['initial gizmo size'] = int(self.zoom.get_active_text())
 
 
 class UndoRedoStack():
