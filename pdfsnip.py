@@ -844,7 +844,7 @@ class PDFsnip(gtk.Builder):
             print("Currently saving don't work more than one file via pdftk. This will come next version. Keep tuned!")
         else:
             filename = self.pdfqueue[0].copyname
-            pages = [str(obj.row[2].page_number) for row in self.model]
+            pages = [str(row[2].page_number) for row in self.model]
 
             args = ["pdftk", filename]
             args.append("cat")
