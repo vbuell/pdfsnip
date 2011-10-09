@@ -261,6 +261,7 @@
                         <property name="use_action_appearance">False</property>
                         <property name="label" translatable="yes">Zoom In</property>
                         <property name="use_underline">True</property>
+                        <accelerator key="equal" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                         <signal name="activate" handler="set_zoom_in" swapped="no"/>
                       </object>
                     </child>
@@ -271,6 +272,7 @@
                         <property name="use_action_appearance">False</property>
                         <property name="label" translatable="yes">Zoom Out</property>
                         <property name="use_underline">True</property>
+                        <accelerator key="minus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                         <signal name="activate" handler="set_zoom_out" swapped="no"/>
                       </object>
                     </child>
