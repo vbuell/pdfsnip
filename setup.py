@@ -27,6 +27,7 @@ from distutils.core import setup
 data_files=[('share/applications/', ['data/pdfsnip.desktop']),
             ('share/pixmaps/', ['data/icons/pdfsnip.svg']),
             ('share/pixmaps/', ['data/icons/pdfsnip.png']),
+            ('share/pdfsnip/', ['data/glade/topwindow.ui']),
 
             ("share/icons/hicolor/16x16/apps", ["data/icons/16x16/pdfsnip.png"]),
             ("share/icons/hicolor/22x22/apps", ["data/icons/22x22/pdfsnip.png"]),
