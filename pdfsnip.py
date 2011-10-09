@@ -82,6 +82,17 @@ except:
     found_pypdf = False
     print("pyPdf wasn't found. Document saving is disabled.")
 
+import subprocess
+try:
+    args = ["pdftk"]
+    subprocess.call(args)
+    found_pdftk = True
+except:
+    found_pdftk = False
+
+
+VERSION = '0.1.1'
+
 LOG_FILE = './pdfsnip.log'
 
 ROOT_DIR = '/apps/pdfsnip'
@@ -93,36 +104,80 @@ KEY_USE_PDFTK = ROOT_DIR + '/use_pdftk'
 KEY_THUMBNAILS_SIZE = ROOT_DIR + '/thumbnails_size'
 KEY_THUMBNAILS_LAZY = ROOT_DIR + '/thumbnails_lazy'
 
+
+class Preferences:
+
+    gizmoSize = 200
+    windowWidth = min(700, gtk.gdk.screen_get_default().get_width() / 2)
+    windowHeight = min(600, gtk.gdk.screen_get_default().get_height() - 50)
+    windowX = 200
+    windowY = 200
+    preferThumbnails = True
+    usePdftk = True
+    lazyThumbnailsRendering = True
+    fitPageWidth = False
+    useAntialiazing = False
+
+    @staticmethod
+    def load():
+        # GConf stuff
+        gconf_client = gconf.client_get_default()
+        Preferences.gconf_client = gconf_client
+        gconf_client.add_dir(ROOT_DIR, gconf.CLIENT_PRELOAD_NONE)
+
+        try:
+            gconf_value = int(gconf_client.get_string(KEY_THUMBNAILS_SIZE))
+            if gconf_value:
+                Preferences.gizmoSize = gconf_value
+            gconf_value = int(gconf_client.get_string(KEY_WINDOW_WIDTH))
+            if gconf_value:
+                Preferences.windowWidth = gconf_value
+            gconf_value = int(gconf_client.get_string(KEY_WINDOW_HEIGHT))
+            if gconf_value:
+                Preferences.windowHeight = gconf_value
+            gconf_value = gconf_client.get_bool(KEY_THUMBNAILS)
+            if isinstance(gconf_value, bool):
+                Preferences.preferThumbnails = gconf_value
+            else:
+                logging.error("Not a BOOL!!!! " + str(gconf_value))
+            gconf_value = gconf_client.get_bool(KEY_USE_PDFTK)
+            if isinstance(gconf_value, bool):
+                Preferences.usePdftk = gconf_value
+            else:
+                logging.error("Not a BOOL!!!! " + str(gconf_value))
+            gconf_value = gconf_client.get_bool(KEY_THUMBNAILS_LAZY)
+            if isinstance(gconf_value, bool):
+                Preferences.lazyThumbnailsRendering = gconf_value
+            else:
+                logging.error("Not a BOOL!!!! " + str(gconf_value))
+            logging.debug("Loaded preferences from gconf: " + str(Preferences.__dict__))
+        except Exception, e:
+            logging.exception(e)
+
+    @staticmethod
+    def save():
+        Preferences.gconf_client.set_string(KEY_WINDOW_WIDTH, str(Preferences.windowWidth))
+        Preferences.gconf_client.set_string(KEY_WINDOW_HEIGHT, str(Preferences.windowHeight))
+        Preferences.gconf_client.set_bool(KEY_USE_PDFTK, Preferences.usePdftk)
+        Preferences.gconf_client.set_string(KEY_THUMBNAILS_SIZE, str(Preferences.gizmoSize))
+        Preferences.gconf_client.set_bool(KEY_THUMBNAILS_LAZY, Preferences.lazyThumbnailsRendering)
+
+        logging.debug("Preferences saved.")
+
+
 class ListObject:
     def __init__(self):
         self.text = None            # 0.Text descriptor
-        self.image = None           # 1.Thumbnail image
         self.doc_number = None      # 2.Document number
         self.page_number = None     # 3.Page number
         self.thumbnail_width = None # 4.Thumbnail width
         self.doc_filename = None    # 5.Document filename
         self.rendered = False       # 6.Rendered
         self.rotation_angle = None  # 7.Rotation angle
-        self.crop_left = None       # 8.Crop left
-        self.crop_right = None      # 9.Crop right
-        self.crop_top = None        # 9.Crop top
-        self.crop_bottom = None     # 9.Crop bottom
+        self.crop = [0., 0., 0., 0.]    # 8.Crop left
         self.need_to_be_rendered = None # 12.Need to be rendered
 
-class PDFsnip:
-    prefs = {
-        'window width': min(700, gtk.gdk.screen_get_default().get_width() / 2),
-        'window height': min(600, gtk.gdk.screen_get_default().get_height() - 50),
-        'window x': 0,
-        'window y': 0,
-        'initial thumbnail size': 300,
-        'initial zoom scale': 0.25,
-        'initial gizmo size': 200,
-        'prefer thumbnails': True,
-        'lazy thumbnails rendering': False,
-        'use pdftk': False,
-    }
-
+class PDFsnip(gtk.Builder):
     MODEL_ROW_INTERN = 1001
     MODEL_ROW_EXTERN = 1002
     TEXT_URI_LIST = 1003
@@ -134,70 +189,13 @@ class PDFsnip:
                   ('MODEL_ROW_EXTERN', gtk.TARGET_OTHER_APP, MODEL_ROW_EXTERN)]
 
     def __init__(self):
-        """Init main window"""
-        self.menu_items = (
-                    # path,                 accelerator,  callback, params, type
-                    # type := {<Title>,<Item>,<CheckItem>,<ToggleItem>,<RadioItem>,<Separator>,<Branch>,<LastBranch>}
-   	            ("/_File",             None,         None, 0, "<Branch>"),
-#   	            ("/File/_New",         "<control>N", self.about_dialog, 0, None),
-#   	            ("/File/_Open",        "<control>O", self.about_dialog, 0, None),
-   	            ("/File/_Append",      "<control>I", self.on_action_add_doc_activate, 0, None),
-   	            ("/File/_Save",        "<control>S", self.save_file, 0, None),
-   	            ("/File/Save _As...",  None,         self.choose_export_pdf_name, 0, None),
-   	            ("/File/sep1",         None,         None, 0, "<Separator>"),
-   	            ("/File/File _Info",   None,         self.file_info, 0, None),
-   	            ("/File/sep1",         None,         None, 0, "<Separator>"),
-   	            ("/File/Quit",         "<control>Q", self.close_application, 0, None),
+        super(PDFsnip, self).__init__()
+        self.add_from_file(os.path.join('/home/vbuell/PycharmProjects/pdfsnip/data/glade', 'topwindow.ui'))
+        self.connect_signals(self)
 
-                ("/_Edit/Undo",      None,     self.on_undo, 0, None),
-                ("/_Edit/Redo",      None,     self.on_redo, 0, None),
+        Preferences.load()
 
-   	            ("/_Edit/Delete",      "Delete",     self.clear_selected, 0, None),
-   	            ("/_Edit/Rotate Clockwise",   "<MOD1>]",        self.rotate_page_right, 0, None),
-   	            ("/_Edit/Rotate Counterclockwise",   "<MOD1>[",        self.rotate_page_left, 0, None),
-   	            ("/_Edit/Crop...",     None,         self.crop_page_dialog, 0, None),
-   	            ("/_Edit/sep2",         None,         None, 0, "<Separator>"),
-   	            ("/_Edit/Preferences...",     None,         self.preferences_dialog, 0, None),
-   	            ("/_View/Use thumbnails when possible",     None, self.toggle_use_thumbnails, 0, "<ToggleItem>"),
-   	            ("/_View/Zoom In",     None,         self.set_zoom_in, 0, None),
-   	            ("/_View/Zoom Out",    None,         self.set_zoom_out, 0, None),
-   	            ("/_View/Zoom To Width", "<control>0", self.set_zoom_width, 0, None),
-#   	            ("/_Tools/Add thumbnails to file",   None,  None, 0, None),
-   	            ("/_Help/About",       None,         self.about_dialog, 0, None),
-   	            )
-        # GConf stuff
-        self.gconf_client = gconf.client_get_default()
-        self.gconf_client.add_dir(ROOT_DIR, gconf.CLIENT_PRELOAD_NONE)
-
-        try:
-            gconf_value = int(self.gconf_client.get_string(KEY_THUMBNAILS_SIZE))
-            if gconf_value:
-                self.prefs['initial gizmo size'] = gconf_value
-            gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_WIDTH))
-            if gconf_value:
-                self.prefs['window width'] = gconf_value
-            gconf_value = int(self.gconf_client.get_string(KEY_WINDOW_HEIGHT))
-            if gconf_value:
-                self.prefs['window height'] = gconf_value
-            gconf_value = self.gconf_client.get_bool(KEY_THUMBNAILS)
-            if isinstance(gconf_value, bool):
-                self.prefs['prefer thumbnails'] = gconf_value
-            else:
-                logging.error("Not a BOOL!!!! " + str(gconf_value))
-            gconf_value = self.gconf_client.get_bool(KEY_USE_PDFTK)
-            if isinstance(gconf_value, bool):
-                self.prefs['use pdftk'] = gconf_value
-            else:
-                logging.error("Not a BOOL!!!! " + str(gconf_value))
-            gconf_value = self.gconf_client.get_bool(KEY_THUMBNAILS_LAZY)
-            if isinstance(gconf_value, bool):
-                self.prefs['lazy thumbnails rendering'] = gconf_value
-            else:
-                logging.error("Not a BOOL!!!! " + str(gconf_value))
-            logging.debug("Loaded preferences from gconf: " + str(self.prefs))
-        except Exception, e:
-            logging.exception(e)
-            print e
+        self.menuitem12.set_active(Preferences.preferThumbnails)
 
         # Create Undo/Redo stack
         self.undo_stack = UndoRedoStack()
@@ -217,48 +215,30 @@ class PDFsnip:
 
         # Create the main window, and attach delete_event signal to terminating
         # the application
-        self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-
-        self.window.set_title('PdfSnip')
-        self.window.set_border_width(0)
-        self.window.move(self.prefs['window x'], self.prefs['window y'])
-        self.window.set_default_size(self.prefs['window width'],
-                                     self.prefs['window height'])
-        self.window.connect('delete_event', self.close_application)
-        self.window.show_all()
-
-        # Create a vbox to hold the thumbnails-container
-        vbox = gtk.VBox()
-        self.window.add(vbox)
-
-        # Create main menu
-        menubar = self.create_main_menu(self.window)
-        vbox.pack_start(menubar, False, True, 0)
-        menubar.show()
+        window = self.topWindow
+        window.set_border_width(0)
+        window.move(Preferences.windowX, Preferences.windowY)
+        window.set_default_size(Preferences.windowWidth,
+                                     Preferences.windowHeight)
 
         # Create a scrolled widow to hold the thumnails-container
-        self.sw = gtk.ScrolledWindow()
-        self.sw.set_border_width(0)
-        self.sw.set_policy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
-        self.sw.drag_dest_set(gtk.DEST_DEFAULT_MOTION |
+        sw = self.scrolledwindow1
+        sw.drag_dest_set(gtk.DEST_DEFAULT_MOTION |
                               gtk.DEST_DEFAULT_HIGHLIGHT |
                               gtk.DEST_DEFAULT_DROP |
                               gtk.DEST_DEFAULT_MOTION,
                               self.TARGETS_SW,
                               gtk.gdk.ACTION_COPY |
                               gtk.gdk.ACTION_MOVE)
-        self.sw.connect('drag_data_received', self.sw_dnd_received_data)
-        self.sw.connect('button_press_event', self.sw_button_press_event)
-        vbox.pack_start(self.sw, True, True, 0)
+        sw.connect('drag_data_received', self.sw_dnd_received_data)
+        sw.connect('button_press_event', self.sw_button_press_event)
 
         # Create ListStore model and IconView
         self.model = gtk.ListStore(str, gtk.gdk.Pixbuf, gobject.TYPE_PYOBJECT)
-        self.zoom_scale = self.prefs['initial zoom scale']
-        self.gizmo_size = self.prefs['initial gizmo size']
-#        self.iv_col_width = self.prefs['initial thumbnail size']
-        self.iv_col_width = self.prefs['initial gizmo size']
+        self.iv_col_width = Preferences.gizmoSize
 
-        self.iconview = gtk.IconView(self.model)
+        self.iconview = self.iconview2
+        self.iconview.set_model(self.model)
         self.iconview.set_item_width(self.iv_col_width + 12)
 
         self.iconview.set_pixbuf_column(1)
@@ -293,22 +273,18 @@ class PDFsnip:
         self.iv_auto_scroll_direction = 0
 
         style = self.iconview.get_style().copy()
-        style_sw = self.sw.get_style()
+        style_sw = sw.get_style()
         for state in (gtk.STATE_NORMAL, gtk.STATE_PRELIGHT, gtk.STATE_ACTIVE):
             style.base[state] = style_sw.bg[gtk.STATE_NORMAL]
         self.iconview.set_style(style)
 
-        if self.prefs['lazy thumbnails rendering']:
+        if Preferences.lazyThumbnailsRendering:
             self.iconview.connect_object('expose-event', self.__on_iconview_visibility_change, self.iconview)
 
 #        self.iconview.set_margin(0)
 
-#        self.sw.add_with_viewport(self.iconview)
-        self.sw.add(self.iconview)
-
         # Status bar
-        status_bar = gtk.Statusbar()
-        vbox.pack_start(status_bar, False, True, 0)
+        status_bar = self.statusbar1
 
         self.statusbar = gtk.HBox()
 
@@ -316,7 +292,6 @@ class PDFsnip:
         frame.remove(frame.get_children()[0])
         frame.add(self.statusbar)
 
-#        context_id = self.status_bar.get_context_id("Statusbar example")
         status_bar.show_all()
 #        self.status_bar.set_has_resize_grip(True)
 #        self.status_bar.push(context_id, "")
@@ -339,12 +314,6 @@ class PDFsnip:
         self.statusbar.pack_start(label_zoom, False, False, 0)
         btn_zoom_in = gtk.Button(label="+")
         self.statusbar.pack_start(btn_zoom_in, False, False, 0)
-
-#        status_bar.hide_all()
-
-        # Define window callback function and show window
-        self.window.connect('size_allocate', self.on_window_size_request)        # resize
-        self.window.show_all()
 
         # Creating the popup menu
         self.popup = gtk.Menu()
@@ -381,16 +350,19 @@ class PDFsnip:
         gobject.signal_new('update_thumbnail', PDF_Renderer,
                            gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_PYOBJECT, gobject.TYPE_PYOBJECT])
         self.rendering_thread = PDF_Renderer(self.model, self.pdfqueue,
-                                             0, self.gizmo_size)
-#                                             self.zoom_scale, self.gizmo_size)
+                                             0, Preferences.gizmoSize)
         self.rendering_thread.connect('reset_iv_width', self.reset_iv_width)
         self.rendering_thread.connect('update_progress_bar', self.update_progress_bar)
         self.rendering_thread.connect('update_thumbnail', self.update_thumbnail)
-        self.rendering_thread.set_prefer_thumbnails(self.prefs['prefer thumbnails'])
+        self.rendering_thread.set_prefer_thumbnails(Preferences.preferThumbnails)
         self.rendering_thread.daemon = True
         self.rendering_thread.start()
 
         self.retitle()
+
+        self.topWindow.show_all()
+
+        self.check_backends()
 
         # Importing documents passed as command line arguments
         for filename in sys.argv[1:]:
@@ -402,6 +374,12 @@ class PDFsnip:
             elif self.ext.lower() == '.pdf':
                 self.add_pdf_pages(filename)
 
+    def __getattr__(self, attr):
+        obj = self.get_object(attr)
+        if not obj:
+            raise AttributeError('object %r has no attribute %r' % (self,attr))
+        setattr(self, attr, obj)
+        return obj
 
     def on_undo(self, window, event):
         pass
@@ -426,24 +404,7 @@ class PDFsnip:
             title += "(several documents)"
 
         title += ' - PdfSnip'
-        self.window.set_title(title)
-
-    def create_main_menu(self, window):
-        accel_group = gtk.AccelGroup()
-        item_factory = gtk.ItemFactory(gtk.MenuBar, "<main>", accel_group)
-        item_factory.create_items(self.menu_items)
-
-        window.add_accel_group(accel_group)
-        item_use_thumbs = item_factory.get_widget("/View/Use thumbnails when possible")
-        try:
-            item_use_thumbs.set_active(self.gconf_client.get_bool(KEY_THUMBNAILS))
-        except Exception, e:
-            logging.exception(e)
-
-        # need to keep a reference to item_factory to prevent its destruction
-        self.item_factory = item_factory
-        # Finally, return the actual menu bar created by the item factory.
-        return item_factory.get_widget("<main>")
+        self.topWindow.set_title(title)
 
     def redraw_thumbnails(self):
         """Drop all existing thumbnails and start rendering thread again"""
@@ -460,7 +421,7 @@ class PDFsnip:
 
     def toggle_use_thumbnails(self, window, event):
         self.gconf_client.set_bool(KEY_THUMBNAILS, event.get_active())
-        self.prefs['prefer thumbnails'] = event.get_active()
+        Preferences.preferThumbnails = event.get_active()
         if hasattr(self, 'rendering_thread'):
             self.rendering_thread.set_prefer_thumbnails(event.get_active())
             self.redraw_thumbnails()
@@ -486,29 +447,28 @@ class PDFsnip:
             self.model.set_value(iter, 1, thumbnail)
         gtk.gdk.threads_leave()
 
-    def set_zoom_in(self, window, event):
+    def set_zoom_in(self, window, event=None):
         """Zoom in thunbnails view."""
-
         logging.debug("Clicked: set_zoom_in")
-        self.gizmo_size = self.gizmo_size * 2
-        self.rendering_thread.set_width(self.gizmo_size)
+        Preferences.gizmoSize = Preferences.gizmoSize * 2
+        Preferences.fitPageWidth = False
         self.redraw_thumbnails()
 
-    def set_zoom_out(self, window, event):
+    def set_zoom_out(self, window, event=None):
         """Zoom out thunbnails view."""
-
         logging.debug("Clicked: set_zoom_out")
-        self.gizmo_size = self.gizmo_size / 2
-        self.rendering_thread.set_width(self.gizmo_size)
+        Preferences.gizmoSize = Preferences.gizmoSize / 2
+        Preferences.fitPageWidth = False
         self.redraw_thumbnails()
 
-    def set_zoom_width(self, window, event):
+    def set_zoom_width(self, window, event=None):
         """Zoom in thunbnails view to the window width."""
-
         logging.debug("Clicked: set_zoom_width")
-        self.gizmo_size = self.sw.get_allocation().width - 8
-        print ">>> ", window, self.gizmo_size
-        self.rendering_thread.set_width(self.gizmo_size)
+        spacings = self.iconview.get_item_padding() * 2 + self.iconview.get_margin() * 2
+        logging.debug("Set spacing to iconview to " + str(spacings))
+        Preferences.gizmoSize = self.iconview2.get_allocation().width - int(spacings)
+        Preferences.fitPageWidth = True
+        logging.info("Set width to " + str(Preferences.gizmoSize))
         self.redraw_thumbnails()
 
     def __on_iconview_visibility_change(self, view, *args):
@@ -519,6 +479,18 @@ class PDFsnip:
         start, end = vrange
 
         logging.info("Visible items: " + str(start[0]) + ":" + str(end[0]))
+
+        # Here we drops all images that are out of sight
+        if Preferences.fitPageWidth:
+            thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
+                                       8, self.iv_col_width, self.iv_col_width)
+            for i in range(len(self.model)):
+                if i not in range(start[0], end[0] + 1):
+                    self.model[i][2].thumbnail_width = 0
+                    if self.model[i][2].need_to_be_rendered == True:
+                        self.model[i][2].need_to_be_rendered = False
+                    if not self.model[i][1]:
+                        self.model[i][1] = thumbnail
 
         for i in range(start[0], end[0] + 1):
             if self.model[i][2].need_to_be_rendered == False:
@@ -532,10 +504,6 @@ class PDFsnip:
     def on_window_size_request(self, window, event):
         """Main Window resize - workaround for autosetting of
            iconview cols no."""
-
-        #add 12 because of: http://bugzilla.gnome.org/show_bug.cgi?id=570152
-
-#        col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + 12))
         col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
         logging.debug("Set column size: " + str(col_num))
 #        col_num = (window.get_size()[0] - self.iconview.get_column_spacing() * 2) / ((self.iv_col_width + self.iconview.get_spacing() * 2 + self.iconview.get_margin() * 2))
@@ -545,7 +513,6 @@ class PDFsnip:
 
     def reset_iv_width(self, renderer=None):
         """Reconfigures the width of the iconview columns"""
-
         gobject.idle_add(self.set_something)
 
     def set_something(self):
@@ -558,19 +525,12 @@ class PDFsnip:
             self.celltxt.set_property('width', self.iv_col_width)
             self.celltxt.set_property('wrap-width', self.iv_col_width)
             self.iconview.set_item_width(self.iv_col_width + 12) #-1)
-            self.on_window_size_request(self.window, None)
+            self.on_window_size_request(self.topWindow, None)
 
     def close_application(self, widget, event=None, data=None):
         """Termination"""
-
         # save configuration
-        self.gconf_client.set_string(KEY_WINDOW_WIDTH, str(self.window.get_size()[0]))
-        self.gconf_client.set_string(KEY_WINDOW_HEIGHT, str(self.window.get_size()[1]))
-        self.gconf_client.set_bool(KEY_USE_PDFTK, self.prefs['use pdftk'])
-        self.gconf_client.set_string(KEY_THUMBNAILS_SIZE, str(self.prefs['initial gizmo size']))
-        self.gconf_client.set_bool(KEY_THUMBNAILS_LAZY, self.prefs['lazy thumbnails rendering'])
-
-        logging.debug("Preferences saved.")
+        Preferences.save()
 
         #gtk.gdk.threads_leave()
         self.rendering_thread.quit = True
@@ -590,9 +550,7 @@ class PDFsnip:
                             firstpage=None, lastpage=None,
                             angle=0, crop=[0.,0.,0.,0.]):
         """Add pages of a pdf document to the model"""
-
-        print "add_djvu_pages"
-
+        logging.debug("add_djvu_pages")
         res = False
         # Check if the document has already been loaded
         pdfdoc = None
@@ -627,18 +585,14 @@ class PDFsnip:
                                        8, width, width)
             item = ListObject()
             item.text = descriptor
-            item.image = thumbnail
             item.doc_number = pdfdoc.nfile
             item.page_number = npage
             item.thumbnail_width = 0
             item.doc_filename = pdfdoc.filename
             item.rendered = False
             item.rotation_angle = angle
-            item.crop_left = crop[0]
-            item.crop_right = crop[1]
-            item.crop_top = crop[2]
-            item.crop_bottom = crop[3]
-            item.need_to_be_rendered = not self.prefs['lazy thumbnails rendering']
+            item.crop = crop
+            item.need_to_be_rendered = not Preferences.lazyThumbnailsRendering
 
             self.model.append((descriptor,
                                thumbnail,
@@ -656,7 +610,6 @@ class PDFsnip:
                             firstpage=None, lastpage=None,
                             angle=0, crop=[0.,0.,0.,0.]):
         """Add pages of a pdf document to the model"""
-
         res = False
         # Check if the document has already been loaded
         pdfdoc = None
@@ -691,18 +644,14 @@ class PDFsnip:
                                        8, width, width)
             item = ListObject()
             item.text = descriptor
-            item.image = thumbnail
             item.doc_number = pdfdoc.nfile
             item.page_number = npage
             item.thumbnail_width = width / 2
             item.doc_filename = pdfdoc.filename
             item.rendered = False
             item.rotation_angle = angle
-            item.crop_left = crop[0]
-            item.crop_right = crop[1]
-            item.crop_top = crop[2]
-            item.crop_bottom = crop[3]
-            item.need_to_be_rendered = not self.prefs['lazy thumbnails rendering']
+            item.crop = crop
+            item.need_to_be_rendered = not Preferences.lazyThumbnailsRendering
 
             self.model.append((descriptor,
                                thumbnail,
@@ -719,7 +668,7 @@ class PDFsnip:
     def save_file(self, widget=None, data=None):
         if len(self.pdfqueue) == 1:
             print "len(self.pdfqueue)", len(self.pdfqueue)
-            if not self.prefs['use pdftk']:
+            if not Preferences.usePdftk:
                 self.export_to_file_using_pypdf(self.pdfqueue[0].filename)
             else:
                 self.export_to_file_using_pdftk(self.pdfqueue[0].filename)
@@ -736,7 +685,6 @@ class PDFsnip:
 
     def choose_export_pdf_name(self, widget=None, data=None):
         """Handles choosing a name for exporting """
-
         chooser = gtk.FileChooserDialog(title=_('Export ...'),
                                         action=gtk.FILE_CHOOSER_ACTION_SAVE,
                                         buttons=(gtk.STOCK_CANCEL,
@@ -764,7 +712,7 @@ class PDFsnip:
                 if ext.lower() != '.pdf':
                     file_out = file_out + '.pdf'
                 try:
-                    if not self.prefs['use pdftk']:
+                    if not Preferences.usePdftk:
                         self.export_to_file_using_pypdf(file_out)
                     else:
                         self.export_to_file_using_pdftk(file_out)
@@ -781,8 +729,34 @@ class PDFsnip:
             break
         chooser.destroy()
 
+    def check_backends(self):
+        """Check backends"""
+        msg = None
+        go_to_preferences = None
+        if not found_pypdf and not found_pdftk:
+            msg = "Neither pypdf or pdftk installed. You won't be able to save your changes."
+        elif not found_pypdf and not Preferences.usePdftk:
+            msg = "pypdf not installed. Please review your backend settings...\nAfter clicking preferences window will be shown."
+            go_to_preferences = True
+        elif not found_pdftk and Preferences.usePdftk:
+            msg = "pdftk not installed. Please review your backend settings...\nAfter clicking preferences window will be shown."
+            go_to_preferences = True
+        if msg:
+            msg_dialog = gtk.MessageDialog(None,
+                gtk.DIALOG_DESTROY_WITH_PARENT, gtk.MESSAGE_WARNING,
+                gtk.BUTTONS_CLOSE,
+                msg)
+            msg_dialog.run()
+            msg_dialog.destroy()
+            logging.error(msg)
+        if go_to_preferences:
+            self.preferences_dialog()
+        return msg == None
+
     def export_to_file_using_pypdf(self, file_out):
         """Export to file"""
+        if not self.check_backends():
+            return
 
         pdf_output = PdfFileWriter()
         pdf_input = []
@@ -808,7 +782,7 @@ class PDFsnip:
             current_page = pdf_input[nfile-1].getPage(npage-1)
             angle = obj.rotation_angle
             angle0 = current_page.get("/Rotate",0)
-            crop = [obj.crop_left,obj.crop_right,obj.crop_top,obj.crop_bottom]
+            crop = obj.crop
             if angle is not 0:
                 current_page.rotateClockwise(angle)
             if crop != [0.,0.,0.,0.]:
@@ -841,8 +815,9 @@ class PDFsnip:
 
     def export_to_file_using_pdftk(self, file_out):
         """Export to file using pdftk"""
+        if not self.check_backends():
+            return
 
-        import subprocess
         if len(self.pdfqueue) > 1:
             print("Currently saving don't work more than one file via pdftk. This will come next version. Keep tuned!")
         else:
@@ -892,8 +867,6 @@ class PDFsnip:
                         self.add_pdf_pages(filename)
                     elif ext == '.djvu':
                         self.add_djvu_pages(filename)
-                    elif ext == '.odt' or ext == '.ods' or ext == '.odc':
-                        print(_('OpenDocument not supported yet!'))
                     elif ext == '.png' or ext == '.jpg' or ext == '.tiff':
                         print(_('Image file not supported yet!'))
                     else:
@@ -933,7 +906,6 @@ class PDFsnip:
 
     def iv_drag_begin(self, iconview, context):
         """Sets custom icon on drag begin for multiple items selected"""
-
         if len(iconview.get_selected_items()) > 1:
             iconview.stop_emission('drag_begin')
             context.set_icon_stock(gtk.STOCK_DND_MULTIPLE, 0, 0)
@@ -941,7 +913,6 @@ class PDFsnip:
     def iv_dnd_get_data(self, iconview, context,
                         selection_data, target_id, etime):
         """Handles requests for data by drag and drop in iconview"""
-
         model = iconview.get_model()
         selection = self.iconview.get_selected_items()
         selection.sort(key=lambda x: x[0])
@@ -951,8 +922,9 @@ class PDFsnip:
                 data.append(str(path[0]))
             elif selection_data.target == 'MODEL_ROW_EXTERN':
                 iter = model.get_iter(path)
-                nfile, npage, angle = model.get(iter, 2, 3, 7)
-                crop = model.get(iter, 8, 9, 10, 11)
+                obj = model.get(iter, 2)
+                nfile, npage, angle = obj.doc_number, obj.page_number, obj.rotation_angle
+                crop = obj.crop
                 pdfdoc = self.pdfqueue[nfile - 1]
                 data.append('\n'.join([pdfdoc.filename,
                                        str(npage),
@@ -965,7 +937,6 @@ class PDFsnip:
     def iv_dnd_received_data(self, iconview, context, x, y,
                              selection_data, target_id, etime):
         """Handles received data by drag and drop in iconview"""
-
         model = iconview.get_model()
         data = selection_data.data
         if data:
@@ -1034,7 +1005,6 @@ class PDFsnip:
 
     def iv_dnd_data_delete(self, widget, context):
         """Deletes dnd items after a successful move operation"""
-
         model = self.iconview.get_model()
         selection = self.iconview.get_selected_items()
         ref_del_list = [gtk.TreeRowReference(model,path) for path in selection]
@@ -1045,10 +1015,9 @@ class PDFsnip:
 
     def iv_dnd_motion(self, iconview, context, x, y, etime):
         """Handles the drag-motion signal in order to auto-scroll the view"""
-
         autoscroll_area = 40
-        sw_vadj = self.sw.get_vadjustment()
-        sw_height = self.sw.get_allocation().height
+        sw_vadj = self.scrolledwindow1.get_vadjustment()
+        sw_height = self.scrolledwindow1.get_allocation().height
         if y -sw_vadj.get_value() < autoscroll_area:
             if not self.iv_auto_scroll_timer:
                 self.iv_auto_scroll_direction = gtk.DIR_UP
@@ -1065,15 +1034,13 @@ class PDFsnip:
 
     def iv_dnd_leave_end(self, widget, context, ignored=None):
         """Ends the auto-scroll during DND"""
-
         if self.iv_auto_scroll_timer:
             gobject.source_remove(self.iv_auto_scroll_timer)
             self.iv_auto_scroll_timer = None
 
     def iv_auto_scroll(self):
         """Timeout routine for auto-scroll"""
-
-        sw_vadj = self.sw.get_vadjustment()
+        sw_vadj = self.scrolledwindow1.get_vadjustment()
         sw_vpos = sw_vadj.get_value()
         if self.iv_auto_scroll_direction == gtk.DIR_UP:
             sw_vpos -= sw_vadj.step_increment
@@ -1085,7 +1052,6 @@ class PDFsnip:
 
     def iv_button_press_event(self, iconview, event):
         """Manages mouse clicks on the iconview"""
-
         if event.button == 3:
             x = int(event.x)
             y = int(event.y)
@@ -1103,7 +1069,6 @@ class PDFsnip:
     def sw_dnd_received_data(self, scrolledwindow, context, x, y,
                              selection_data, target_id, etime):
         """Handles received data by drag and drop in scrolledwindow"""
-
         data = selection_data.data
         if target_id == self.MODEL_ROW_EXTERN:
             self.model
@@ -1127,13 +1092,11 @@ class PDFsnip:
 
     def sw_button_press_event(self, scrolledwindow, event):
         """Unselects all items in iconview on mouse click in scrolledwindow"""
-
         if event.button == 1:
             self.iconview.unselect_all()
 
     def get_file_path_from_dnd_dropped_uri(self, uri):
         """Extracts the path from an uri"""
-
         path = urllib.url2pathname(uri) # escape special chars
         path = path.strip('\r\n\x00')   # remove \r\n and NULL
 
@@ -1154,15 +1117,15 @@ class PDFsnip:
 
     def rotate_page(self, angle):
         """Rotates the selected page in the IconView"""
-
         model = self.iconview.get_model()
         selection = self.iconview.get_selected_items()
         if len(selection) > 0:
             self.set_dirty(True)
         for path in selection:
             iter = model.get_iter(path)
-            nfile = model.get_value(iter, 2)
-            npage = model.get_value(iter, 3)
+            obj = model.get_value(iter, 2)
+            nfile = obj.doc_number
+            npage = obj.page_number
 
             rotate_times = (((-angle) % 360 + 45) / 90) % 4
             crop = [0.,0.,0.,0.]
@@ -1170,14 +1133,13 @@ class PDFsnip:
                 perm = [0,2,1,3]
                 for it in range(rotate_times):
                     perm.append(perm.pop(0))
-                perm.insert(1,perm.pop(2))
-                crop = [model.get_value(iter, 8 + perm[side]) for side in range(4)]
-                for side in range(4):
-                    model.set_value(iter, 8 + side, crop[side])
+                perm.insert(1, perm.pop(2))
+                crop = obj.crop
+#                for side in range(4):
+#                    model.set_value(iter, 8 + side, crop[side])
 
-            new_angle = model.get_value(iter, 7) + angle
-            model.set_value(iter, 7, new_angle)
-            model.set_value(iter, 6, False) #rendering request
+            obj.rotation_angle = obj.rotation_angle + angle
+            obj.rendered = False
 
         if self.rendering_thread.paused:
             self.rendering_thread.paused = False
@@ -1185,9 +1147,8 @@ class PDFsnip:
             self.rendering_thread.evnt.clear()
 
 
-    def file_info(self, widget, event):
+    def file_info(self, widget, event=None):
         """Shows info about opened file(s)"""
-
         info = "<b>Filename: </b>"
         if len(self.pdfqueue) == 1:
             info += self.pdfqueue[0].filename
@@ -1203,7 +1164,6 @@ class PDFsnip:
 
     def crop_page_dialog(self, widget, data=None):
         """Opens a dialog box to define margins for page cropping"""
-
         model = self.iconview.get_model()
         selection = self.iconview.get_selected_items()
 
@@ -1211,10 +1171,10 @@ class PDFsnip:
         if selection:
             path = selection[0]
             iter = model.get_iter(path)
-            crop = [model.get_value(iter, 8 + side) for side in range(4)]
+            crop = model.get_value(iter, 2).crop
 
         dialog = gtk.Dialog(title=(_('Crop Selected Page(s)')),
-                            parent=self.window,
+                            parent=self.topWindow,
                             flags=gtk.DIALOG_MODAL,
                             buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
                                      gtk.STOCK_OK, gtk.RESPONSE_OK))
@@ -1237,7 +1197,7 @@ class PDFsnip:
             label.set_alignment(0, 0.0)
             hbox.pack_start(label, True, True, 20)
 
-            adj = gtk.Adjustment(100.*crop.pop(0), 0.0, 100.0, 1.0, 5.0, 0.0)
+            adj = gtk.Adjustment(100. * crop.pop(0), 0.0, 100.0, 1.0, 5.0, 0.0)
             spinner = gtk.SpinButton(adj, 0, 1)
             spinner.set_activates_default(True)
             spin_list.append(spinner)
@@ -1265,22 +1225,22 @@ class PDFsnip:
             print(_('Dialog closed'))
         dialog.destroy()
 
-    def preferences_dialog(self, widget, data=None):
+    def preferences_dialog(self, widget=None, data=None):
         """Opens a preferences dialog box"""
-        dialog = PreferencesWindow(self.prefs)
+        dialog = PreferencesWindow()
         dialog.run()
         dialog.destroy()
 
     def about_dialog(self, widget, data=None):
         about_dialog = gtk.AboutDialog()
         try:
-            about_dialog.set_transient_for(self.window)
+            about_dialog.set_transient_for(self.topWindow)
             about_dialog.set_modal(True)
-        except:
-            pass
+        except Exception, e:
+            logging.exception(e)
         # FIXME
         about_dialog.set_name('PdfSnip')
-        about_dialog.set_version('0.0.10')
+        about_dialog.set_version(VERSION)
         about_dialog.set_comments(_(
             'PdfSnip is an GTK+ based utility for splitting, rearrangement ' \
             'and modification of PDF documents.'))
@@ -1345,18 +1305,13 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         gobject.GObject.__init__(self)
         self.model = model
         self.scale = scale
-        self.default_width = width
         self.pdfqueue = pdfqueue
         self.quit = False
         self.evnt = threading.Event()
         self.paused = False
-        self.antialiazing = True
         self.antialiazing_factor = 4
         self.prefer_thumbnails = True
         self.restart_loop = False
-
-    def set_width(self, width):
-        self.default_width = width
 
     def set_prefer_thumbnails(self, flag):
         self.prefer_thumbnails = flag
@@ -1389,16 +1344,14 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         """
         @type obj: ListObject
         """
-#        logging.debug("process_item")
         if not obj.rendered and obj.need_to_be_rendered:
 #                    gtk.gdk.threads_enter() # Overusing of threads_enter for models
             try:
-                crop = [obj.crop_left, obj.crop_right, obj.crop_top, obj.crop_bottom]
                 pdfdoc = self.pdfqueue[obj.doc_number - 1]
                 if isinstance(pdfdoc, PDF_Doc):
-                    thumbnail = self.load_pdf_thumbnail(pdfdoc, obj.page_number, obj.rotation_angle, crop)
+                    thumbnail = self.load_pdf_thumbnail(pdfdoc, obj.page_number, obj.rotation_angle, obj.crop)
                 elif isinstance(pdfdoc, DJVU_Doc):
-                    thumbnail = self.load_djvu_thumbnail(pdfdoc, obj.page_number, obj.rotation_angle, crop)
+                    thumbnail = self.load_djvu_thumbnail(pdfdoc, obj.page_number, obj.rotation_angle, obj.crop)
 
                 self.emit('update_thumbnail', iter, thumbnail)
             except Exception, e:
@@ -1416,14 +1369,14 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 
     def bbox_upscale(self, box, gizmo):
         pix_w, pix_h = box
-        if pix_h > pix_w:
-            pix_scale = float(gizmo)/float(pix_h)
-            pix_w = int(float(gizmo) * float(pix_w) / float(pix_h))
-            pix_h = gizmo
-        elif pix_h < pix_w:
+        if pix_h < pix_w or Preferences.fitPageWidth:
             pix_scale = float(gizmo)/float(pix_w)
             pix_h = int(float(gizmo) * float(pix_h) / float(pix_w))
             pix_w = gizmo
+        elif pix_h > pix_w:
+            pix_scale = float(gizmo)/float(pix_h)
+            pix_w = int(float(gizmo) * float(pix_w) / float(pix_h))
+            pix_h = gizmo
         else:
             pix_scale = float(gizmo)/float(pix_w)
             pix_w = gizmo
@@ -1443,7 +1396,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                         gtk.gdk.INTERP_BILINEAR)
         return thumbnail_small
 
-    def render_pdf_page(self, page, gizmo_size, antialiazing=True, prefer_thumbs=True):
+    def render_pdf_page(self, page, gizmo_size, prefer_thumbs=True):
         """Create pixbuf from page"""
         got_pixbuf = False
         if prefer_thumbs:
@@ -1451,18 +1404,20 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             if thumbnail:
                 got_pixbuf = True
                 print "Got thumbnail!!!!", thumbnail.get_width(), thumbnail.get_height()
-                thumbnail = self.scale_pixbuf(thumbnail, self.default_width)
+                thumbnail = self.scale_pixbuf(thumbnail, Preferences.gizmoSize)
         if not got_pixbuf:
             # Render page
             pix_w, pix_h = page.get_size()
             if self.scale == 0:
-                pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), self.default_width)
+                pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), Preferences.gizmoSize)
             else:
                 pix_scale = self.scale
                 pix_w = int(pix_w * self.scale)
                 pix_h = int(pix_h * self.scale)
 
-            if self.antialiazing:
+            antialiasing = Preferences.useAntialiazing
+
+            if antialiasing:
                 pix_w = pix_w*self.antialiazing_factor
                 pix_h = pix_h*self.antialiazing_factor
                 pix_scale = pix_scale*self.antialiazing_factor
@@ -1473,12 +1428,12 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 #            print "render_to_pixbuf", pix_w, pix_h, pix_scale
             page.render_to_pixbuf(0,0,pix_w,pix_h, pix_scale, 0, thumbnail)
 
-            if self.antialiazing:
-                thumbnail = self.scale_pixbuf(thumbnail, self.default_width)
+            if antialiasing:
+                thumbnail = self.scale_pixbuf(thumbnail, Preferences.gizmoSize)
         return thumbnail
 
 
-    def render_djvu_page(self, page, gizmo_size, antialiazing=True, prefer_thumbs=True):
+    def render_djvu_page(self, page, gizmo_size, prefer_thumbs=True):
         """Create pixbuf from page"""
         import numpy
 
@@ -1518,7 +1473,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             thumbnail = gtk.gdk.pixbuf_new_from_data(color_buffer, gtk.gdk.COLORSPACE_RGB, False, 8, pix_w, pix_h, bytes_per_line)
 
             # Resize
-            thumbnail = self.scale_pixbuf(thumbnail, self.default_width)
+            thumbnail = self.scale_pixbuf(thumbnail, Preferences.gizmoSize)
 
             print "3"
             return thumbnail
@@ -1528,10 +1483,9 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 
     def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
-
         page = pdfdoc.document.get_page(npage-1)
         try:
-            thumbnail = self.render_pdf_page(page, self.default_width, antialiazing=True, prefer_thumbs=self.prefer_thumbnails)
+            thumbnail = self.render_pdf_page(page, Preferences.gizmoSize, prefer_thumbs=self.prefer_thumbnails)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
@@ -1552,7 +1506,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                 pix_h = thumbnail.get_height()
         except Exception, e:
             print "Exception detected:", e
-            pix_w = self.default_width
+            pix_w = Preferences.gizmoSize
             pix_h = pix_w
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, pix_w, pix_h)
@@ -1565,10 +1519,9 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 
     def load_djvu_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
-
         page = pdfdoc.document.pages[npage-1]
         try:
-            thumbnail = self.render_djvu_page(page, self.default_width, antialiazing=True, prefer_thumbs=self.prefer_thumbnails)
+            thumbnail = self.render_djvu_page(page, Preferences.gizmoSize, prefer_thumbs=self.prefer_thumbnails)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
@@ -1589,7 +1542,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                 pix_h = thumbnail.get_height()
         except Exception, e:
             print "Exception detected:", e
-            pix_w = self.default_width
+            pix_w = Preferences.gizmoSize
             pix_h = pix_w
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, pix_w, pix_h)
@@ -1636,12 +1589,11 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
 class PreferencesWindow(gtk.Dialog):
     """Displays global preference window"""
 
-    def __init__(self, config):
+    def __init__(self):
         """ Initialize the Status window. """
         super(PreferencesWindow, self).__init__(flags=gtk.DIALOG_MODAL)
         self.set_title("Preferences")
         self.add_buttons(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_OK, gtk.RESPONSE_OK)
-        self.config = config
         self._create()
         self.connect('response', self.close)
 
@@ -1681,14 +1633,19 @@ class PreferencesWindow(gtk.Dialog):
         table.attach(align, 1, 2, 0, 1, gtk.EXPAND | gtk.FILL, gtk.FILL)
 
         self.use_thumbs = gtk.CheckButton()
-        self.use_thumbs.set_active(self.config['prefer thumbnails'])
+        self.use_thumbs.set_active(Preferences.preferThumbnails)
         self.use_thumbs.set_label("Use embedded thumbnails when possible")
         table.attach(self.use_thumbs, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
 
         self.thumbs_lazy_rendering = gtk.CheckButton()
-        self.thumbs_lazy_rendering.set_active(self.config['lazy thumbnails rendering'])
+        self.thumbs_lazy_rendering.set_active(Preferences.lazyThumbnailsRendering)
         self.thumbs_lazy_rendering.set_label("Lazy thumbnails rendering")
         table.attach(self.thumbs_lazy_rendering, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+
+        self.thumbs_antialiazing = gtk.CheckButton()
+        self.thumbs_antialiazing.set_active(Preferences.useAntialiazing)
+        self.thumbs_antialiazing.set_label("Use antialiazing")
+        table.attach(self.thumbs_antialiazing, 0, 2, 3, 4, gtk.EXPAND | gtk.FILL, gtk.FILL)
 
         return vbox
 
@@ -1709,28 +1666,39 @@ class PreferencesWindow(gtk.Dialog):
         table.attach(align, 0, 2, 0, 1, gtk.FILL, gtk.FILL)
 
         self.use_pypdf = gtk.RadioButton()
-        self.use_pypdf.set_active(not self.config['use pdftk'])
+        self.use_pypdf.set_active(not Preferences.usePdftk)
         self.use_pypdf.set_label("PyPDF")
-        table.attach(self.use_pypdf, 0, 2, 1, 2, gtk.FILL, gtk.FILL)
+        table.attach(self.use_pypdf, 0, 1, 1, 2, gtk.FILL, gtk.FILL)
+
+        if not found_pypdf:
+            image = gtk.Image()
+            image.set_from_stock(gtk.STOCK_DIALOG_WARNING, gtk.ICON_SIZE_MENU)
+            image.set_tooltip_text("pypdf not installed")
+            table.attach(image, 1, 2, 1, 2, gtk.EXPAND | gtk.FILL, gtk.FILL)
+            self.use_pypdf.set_sensitive(False)
 
         self.use_pdftk = gtk.RadioButton(self.use_pypdf)
-        self.use_pdftk.set_active(self.config['use pdftk'])
+        self.use_pdftk.set_active(Preferences.usePdftk)
         self.use_pdftk.set_label("pdftk")
-        table.attach(self.use_pdftk, 0, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+        table.attach(self.use_pdftk, 0, 1, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+
+        if not found_pdftk:
+            image = gtk.Image()
+            image.set_from_stock(gtk.STOCK_DIALOG_WARNING, gtk.ICON_SIZE_MENU)
+            image.set_tooltip_text("pypdf not installed")
+            table.attach(image, 1, 2, 2, 3, gtk.EXPAND | gtk.FILL, gtk.FILL)
+            self.use_pdftk.set_sensitive(False)
 
         return vbox
-
-    def display(self):
-        self.window.show_all()
 
     def close(self, widget, event=None, data=None):
         if event == gtk.RESPONSE_OK:
             print "Saving settings..."
             # Push settings back
-            self.config['use pdftk'] = self.use_pdftk.get_active()
-            self.config['prefer thumbnails'] = self.use_thumbs.get_active()
-            self.config['lazy thumbnails rendering'] = self.thumbs_lazy_rendering.get_active()
-            self.config['initial gizmo size'] = int(self.zoom.get_active_text())
+            Preferences.usePdftk = self.use_pdftk.get_active()
+            Preferences.preferThumbnails = self.use_thumbs.get_active()
+            Preferences.lazyThumbnailsRendering = self.thumbs_lazy_rendering.get_active()
+            Preferences.gizmoSize = int(self.zoom.get_active_text())
 
 
 class UndoRedoStack():
@@ -1785,7 +1753,7 @@ if __name__ == '__main__':
     consoleHandler.setLevel(logging.DEBUG)
     consoleHandler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(message)s'))
     logging.getLogger('').addHandler(consoleHandler)
-    logging.info("pdf-snip started...")
+    logging.info("PdfSnip started...")
 
     PDFsnip()
 #    gtk.gdk.threads_enter()
