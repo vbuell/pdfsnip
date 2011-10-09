@@ -190,7 +190,20 @@ class PDFsnip(gtk.Builder):
 
     def __init__(self):
         super(PDFsnip, self).__init__()
-        self.add_from_file(os.path.join('/home/vbuell/PycharmProjects/pdfsnip/data/glade', 'topwindow.ui'))
+
+        # Check first in the directory of this script.
+        if os.path.isfile('data/glade/topwindow.ui'):
+            glade_file = 'data/glade/topwindow.ui'
+        # Then check to see if its installed on a *nix system
+        elif os.path.isfile(os.path.join(os.path.dirname(sys.argv[0]), '../share/pdfsnip/topwindow.ui')):
+            glade_file = os.path.join(os.path.dirname(sys.argv[0]), '../share/pdfsnip/topwindow.ui')
+        else:
+            print 'ERROR.'
+            print 'Could not find the glade UI file.'
+            print 'Try reinstalling the application.'
+            sys.exit(1)
+
+        self.add_from_file(glade_file)
         self.connect_signals(self)
 
         Preferences.load()
