@@ -411,8 +411,11 @@ class PDFsnip(gtk.Builder):
         for row in self.model:
             row[2].rendered = False
             row[2].need_to_be_rendered = False
+            row[2].thumbnail_width = 0
 
         self.rendering_thread.restart_loop = True
+
+        self.__on_iconview_visibility_change()
 
         if self.rendering_thread.paused:
             self.rendering_thread.paused = False
@@ -471,7 +474,7 @@ class PDFsnip(gtk.Builder):
         logging.info("Set width to " + str(Preferences.gizmoSize))
         self.redraw_thumbnails()
 
-    def __on_iconview_visibility_change(self, view, *args):
+    def __on_iconview_visibility_change(self, view=None, *args):
         logging.debug("__update_visibility")
         vrange = self.iconview.get_visible_range()
         if vrange is None:
@@ -579,7 +582,10 @@ class PDFsnip(gtk.Builder):
            n_end = max(n_start, min(n_end, lastpage))
 
         for npage in range(n_start, n_end + 1):
-            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
+#            if only one document:
+            descriptor = ''.join([_('page'), ' ', str(npage)])
+#            else:
+#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
             width = self.iv_col_width
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, width, width)
@@ -638,7 +644,10 @@ class PDFsnip(gtk.Builder):
            n_end = max(n_start, min(n_end, lastpage))
 
         for npage in range(n_start, n_end + 1):
-            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
+#            if only one document:
+            descriptor = ''.join([_('page'), ' ', str(npage)])
+#            else:
+#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
             width = self.iv_col_width
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, width, width)
