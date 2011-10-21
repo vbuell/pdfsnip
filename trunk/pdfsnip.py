@@ -894,7 +894,6 @@ class PDFsnip(gtk.Builder):
 
     def clear_selected(self, button=None, data=None):
         """Removes the selected Element in the IconView"""
-
         model = self.iconview.get_model()
         selection = self.iconview.get_selected_items()
         if selection:
@@ -904,7 +903,9 @@ class PDFsnip(gtk.Builder):
                 iter = model.get_iter(path)
                 model.remove(iter)
             path = selection[-1]
+
             self.iconview.select_path(path)
+            self.iconview.set_cursor(path)
             if not self.iconview.path_is_selected(path):
                 if len(model) > 0:	# select the last row
                     row = model[-1]
@@ -912,10 +913,10 @@ class PDFsnip(gtk.Builder):
                     self.iconview.select_path(path)
             self.iconview.grab_focus()
 
-        if self.rendering_thread.paused:
-            self.rendering_thread.paused = False
-            self.rendering_thread.evnt.set()
-            self.rendering_thread.evnt.clear()
+            if self.rendering_thread.paused:
+                self.rendering_thread.paused = False
+                self.rendering_thread.evnt.set()
+                self.rendering_thread.evnt.clear()
             
 
     def iv_drag_begin(self, iconview, context):
@@ -1185,7 +1186,8 @@ class PDFsnip(gtk.Builder):
         if selection:
             path = selection[0]
             iter = model.get_iter(path)
-            crop = model.get_value(iter, 2).crop
+            listObject = model.get_value(iter, 2)
+            crop = listObject.crop
             image = model.get_value(iter, 1)
 
 #        dialog = gtk.Dialog(title=(_('Crop Selected Page(s)')),
@@ -1226,18 +1228,26 @@ class PDFsnip(gtk.Builder):
 
         dialog = self.dialogPage
 
+        self.spinbuttonLeft.set_adjustment(gtk.Adjustment(100. * crop[0], 0.0, 100.0, 1.0, 5.0, 0.0))
+        self.spinbuttonRight.set_adjustment(gtk.Adjustment(100. * crop[1], 0.0, 100.0, 1.0, 5.0, 0.0))
+        self.spinbuttonTop.set_adjustment(gtk.Adjustment(100. * crop[2], 0.0, 100.0, 1.0, 5.0, 0.0))
+        self.spinbuttonBottom.set_adjustment(gtk.Adjustment(100. * crop[3], 0.0, 100.0, 1.0, 5.0, 0.0))
+
         self.image2.set_from_pixbuf(image)
 
         dialog.show_all()
         result = dialog.run()
 
         if result == gtk.RESPONSE_OK:
-            crop = [side.get_value()/100. for side in spin_list]
+            crop[0] = self.spinbuttonLeft.get_value()/100
+            crop[1] = self.spinbuttonRight.get_value()/100
+            crop[2] = self.spinbuttonTop.get_value()/100
+            crop[3] = self.spinbuttonBottom.get_value()/100
             for path in selection:
                 iter = model.get_iter(path)
-                for it in range(4):
-                    model.set_value(iter, 8 + it, crop[it])
-                model.set_value(iter, 6, False) #rendering request
+                listObject = model.get_value(iter, 2)
+                listObject.crop = crop
+                listObject.rendered = False
             if self.rendering_thread.paused:
                 self.rendering_thread.paused = False
                 self.rendering_thread.evnt.set()
@@ -1458,6 +1468,8 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         """Create pixbuf from page"""
         import numpy
 
+        assert type(page) is djvu.decode.Page
+
         # Render page
         page_job = page.decode(wait=True)
         pix_w, pix_h = page_job.size
@@ -1499,8 +1511,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             print "3"
             return thumbnail
         except Exception, e:
-            print "Type:", type(e), "Message:", e
-
+            logging.exception(e)
 
     def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
