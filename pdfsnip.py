@@ -328,25 +328,6 @@ class PDFsnip(gtk.Builder):
         btn_zoom_in = gtk.Button(label="+")
         self.statusbar.pack_start(btn_zoom_in, False, False, 0)
 
-        # Creating the popup menu
-        self.popup = gtk.Menu()
-        popup_rotate_right = gtk.MenuItem(_('Rotate Page(s) Clockwise'))
-        popup_rotate_left = gtk.MenuItem(_('Rotate Page(s) Counterclockwise'))
-        popup_crop = gtk.MenuItem(_('Crop Page(s)'))
-        popup_delete = gtk.MenuItem(_('Delete Page(s)'))
-        popup_rotate_right.connect('activate', self.rotate_page_right)
-        popup_rotate_left.connect('activate', self.rotate_page_left)
-        popup_crop.connect('activate', self.crop_page_dialog)
-        popup_delete.connect('activate', self.clear_selected)
-        popup_rotate_right.show()
-        popup_rotate_left.show()
-        popup_crop.show()
-        popup_delete.show()
-        self.popup.append(popup_rotate_right)
-        self.popup.append(popup_rotate_left)
-        self.popup.append(popup_crop)
-        self.popup.append(popup_delete)
-
         # Initializing variables
         self.export_directory = os.getenv('HOME')
         self.import_directory = os.getenv('HOME')
@@ -466,14 +447,14 @@ class PDFsnip(gtk.Builder):
     def set_zoom_in(self, window, event=None):
         """Zoom in thunbnails view."""
         logging.debug("Clicked: set_zoom_in")
-        Preferences.gizmoSize = Preferences.gizmoSize * 2
+        Preferences.gizmoSize *= 2
         Preferences.fitPageWidth = False
         self.redraw_thumbnails()
 
     def set_zoom_out(self, window, event=None):
         """Zoom out thunbnails view."""
         logging.debug("Clicked: set_zoom_out")
-        Preferences.gizmoSize = Preferences.gizmoSize / 2
+        Preferences.gizmoSize /= 2
         Preferences.fitPageWidth = False
         self.redraw_thumbnails()
 
@@ -503,13 +484,13 @@ class PDFsnip(gtk.Builder):
             for i in range(len(self.model)):
                 if i not in range(start[0], end[0] + 1):
                     self.model[i][2].thumbnail_width = 0
-                    if self.model[i][2].need_to_be_rendered == True:
+                    if self.model[i][2].need_to_be_rendered:
                         self.model[i][2].need_to_be_rendered = False
                     if not self.model[i][1]:
                         self.model[i][1] = thumbnail
 
         for i in range(start[0], end[0] + 1):
-            if self.model[i][2].need_to_be_rendered == False:
+            if not self.model[i][2].need_to_be_rendered:
                 self.model[i][2].need_to_be_rendered = True
 
         if self.rendering_thread.paused:
@@ -545,13 +526,24 @@ class PDFsnip(gtk.Builder):
 
     def close_application(self, widget, event=None, data=None):
         """Termination"""
+
+        if self.is_dirty:
+            msg_dialog = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
+                                              type=gtk.MESSAGE_WARNING,
+               message_format="The document was changed. Are you sure you want to close app?",
+                                              buttons=gtk.BUTTONS_YES_NO)
+            response = msg_dialog.run()
+            msg_dialog.destroy()
+            if response == gtk.RESPONSE_NO:
+                return True
+
         # save configuration
         Preferences.save()
 
         #gtk.gdk.threads_leave()
         self.rendering_thread.quit = True
         #gtk.gdk.threads_enter()
-        if self.rendering_thread.paused == True:
+        if self.rendering_thread.paused:
              self.rendering_thread.evnt.set()
              self.rendering_thread.evnt.clear()
         if os.path.isdir(self.tmp_dir):
@@ -732,7 +724,7 @@ class PDFsnip(gtk.Builder):
                 (path, shortname) = os.path.split(file_out)
                 (shortname, ext) = os.path.splitext(shortname)
                 if ext.lower() != '.pdf':
-                    file_out = file_out + '.pdf'
+                    file_out += '.pdf'
                 try:
                     if not Preferences.usePdftk:
                         self.export_to_file_using_pypdf(file_out)
@@ -773,7 +765,7 @@ class PDFsnip(gtk.Builder):
             logging.error(msg)
         if go_to_preferences:
             self.preferences_dialog()
-        return msg == None
+        return msg is None
 
     def export_to_file_using_pypdf(self, file_out):
         """Export to file"""
@@ -1085,7 +1077,7 @@ class PDFsnip(gtk.Builder):
                     iconview.unselect_all()
                 iconview.select_path(path)
                 iconview.grab_focus()
-                self.popup.popup(None, None, None, event.button, time)
+                self.menu2.popup(None, None, None, event.button, time)  # Glade injection
             return 1
 
     def sw_dnd_received_data(self, scrolledwindow, context, x, y,
@@ -1194,40 +1186,47 @@ class PDFsnip(gtk.Builder):
             path = selection[0]
             iter = model.get_iter(path)
             crop = model.get_value(iter, 2).crop
+            image = model.get_value(iter, 1)
 
-        dialog = gtk.Dialog(title=(_('Crop Selected Page(s)')),
-                            parent=self.topWindow,
-                            flags=gtk.DIALOG_MODAL,
-                            buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-                                     gtk.STOCK_OK, gtk.RESPONSE_OK))
-        dialog.set_size_request(340, 250)
-        dialog.set_default_response(gtk.RESPONSE_OK)
+#        dialog = gtk.Dialog(title=(_('Crop Selected Page(s)')),
+#                            parent=self.topWindow,
+#                            flags=gtk.DIALOG_MODAL,
+#                            buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+#                                     gtk.STOCK_OK, gtk.RESPONSE_OK))
+#        dialog.set_size_request(340, 250)
+#        dialog.set_default_response(gtk.RESPONSE_OK)
+#
+#        frame = gtk.Frame(_('Crop Margins'))
+#        dialog.vbox.pack_start(frame, False, False, 20)
+#
+#        vbox = gtk.VBox(False, 0)
+#        frame.add(vbox)
+#
+#        spin_list = []
+#        units = 2 * [_('% of width')] + 2 * [_('% of height')]
+#        for margin in (_('Left'),_('Right'),_('Top'),_('Bottom')):
+#            hbox = gtk.HBox(True, 0)
+#            vbox.pack_start(hbox, False, False, 5)
+#
+#            label = gtk.Label(margin)
+#            label.set_alignment(0, 0.0)
+#            hbox.pack_start(label, True, True, 20)
+#
+#            adj = gtk.Adjustment(100. * crop.pop(0), 0.0, 100.0, 1.0, 5.0, 0.0)
+#            spinner = gtk.SpinButton(adj, 0, 1)
+#            spinner.set_activates_default(True)
+#            spin_list.append(spinner)
+#            hbox.pack_start(spinner, False, False, 30)
+#
+#            label = gtk.Label(units.pop(0))
+#            label.set_alignment(0, 0.0)
+#            hbox.pack_start(label, True, True, 0)
+#
+#        dialog.show_all()
 
-        frame = gtk.Frame(_('Crop Margins'))
-        dialog.vbox.pack_start(frame, False, False, 20)
+        dialog = self.dialogPage
 
-        vbox = gtk.VBox(False, 0)
-        frame.add(vbox)
-
-        spin_list = []
-        units = 2 * [_('% of width')] + 2 * [_('% of height')]
-        for margin in (_('Left'),_('Right'),_('Top'),_('Bottom')):
-            hbox = gtk.HBox(True, 0)
-            vbox.pack_start(hbox, False, False, 5)
-
-            label = gtk.Label(margin)
-            label.set_alignment(0, 0.0)
-            hbox.pack_start(label, True, True, 20)
-
-            adj = gtk.Adjustment(100. * crop.pop(0), 0.0, 100.0, 1.0, 5.0, 0.0)
-            spinner = gtk.SpinButton(adj, 0, 1)
-            spinner.set_activates_default(True)
-            spin_list.append(spinner)
-            hbox.pack_start(spinner, False, False, 30)
-
-            label = gtk.Label(units.pop(0))
-            label.set_alignment(0, 0.0)
-            hbox.pack_start(label, True, True, 0)
+        self.image2.set_from_pixbuf(image)
 
         dialog.show_all()
         result = dialog.run()
@@ -1341,7 +1340,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
     def run(self):
         while not self.quit:
             iter = self.model.get_iter_first()
-            while iter != None and self.model.iter_is_valid(iter):
+            while iter is not None and self.model.iter_is_valid(iter):
                 if self.quit:
                     break
                 if self.restart_loop:
