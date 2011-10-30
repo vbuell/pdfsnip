@@ -403,9 +403,10 @@ class PDFsnip(gtk.Builder):
     def redraw_thumbnails(self):
         """Drop all existing thumbnails and start rendering thread again"""
         for row in self.model:
-            row[2].rendered = False
-            row[2].need_to_be_rendered = False
-            row[2].thumbnail_width = 0
+            item = row[2]
+            item.rendered = False
+            item.need_to_be_rendered = False
+            item.thumbnail_width = 0
 
         self.rendering_thread.restart_loop = True
 
@@ -483,9 +484,10 @@ class PDFsnip(gtk.Builder):
                                        8, self.iv_col_width, self.iv_col_width)
             for i in range(len(self.model)):
                 if i not in range(start[0], end[0] + 1):
-                    self.model[i][2].thumbnail_width = 0
-                    if self.model[i][2].need_to_be_rendered:
-                        self.model[i][2].need_to_be_rendered = False
+                    item = self.model[i][2]
+                    item.thumbnail_width = 0
+                    if item.need_to_be_rendered:
+                        item.need_to_be_rendered = False
                     if not self.model[i][1]:
                         self.model[i][1] = thumbnail
 
@@ -510,9 +512,9 @@ class PDFsnip(gtk.Builder):
 
     def reset_iv_width(self, renderer=None):
         """Reconfigures the width of the iconview columns"""
-        gobject.idle_add(self.set_something)
+        gobject.idle_add(self.reset_iv_width_real)
 
-    def set_something(self):
+    def reset_iv_width_real(self):
         if not len(self.model):
             return
         max_w = max(row[2].thumbnail_width for row in self.model)
@@ -526,7 +528,6 @@ class PDFsnip(gtk.Builder):
 
     def close_application(self, widget, event=None, data=None):
         """Termination"""
-
         if self.is_dirty:
             msg_dialog = gtk.MessageDialog(flags=gtk.DIALOG_MODAL,
                                               type=gtk.MESSAGE_WARNING,
@@ -557,7 +558,10 @@ class PDFsnip(gtk.Builder):
     def add_djvu_pages(self, filename,
                             firstpage=None, lastpage=None,
                             angle=0, crop=[0.,0.,0.,0.]):
-        """Add pages of a pdf document to the model"""
+        """
+        Add pages of a pdf document to the model.
+        Note that firstpage and lastpage are zero based.
+        """
         logging.debug("add_djvu_pages")
         res = False
         # Check if the document has already been loaded
@@ -579,25 +583,25 @@ class PDFsnip(gtk.Builder):
             else:
                 return res
 
-        n_start = 1
-        n_end = pdfdoc.npage
+        n_start = 0
+        n_end = pdfdoc.number_of_pages
         if firstpage:
-           n_start = min(n_end, max(1, firstpage))
+           n_start = min(n_end, max(1, firstpage + 1))
         if lastpage:
-           n_end = max(n_start, min(n_end, lastpage))
+           n_end = max(n_start, min(n_end, lastpage + 1))
 
-        for npage in range(n_start, n_end + 1):
+        for page_number in range(n_start, n_end):
 #            if only one document:
-            descriptor = ''.join([_('page'), ' ', str(npage)])
+            descriptor = ''.join([_('page'), ' ', str(page_number + 1)])
 #            else:
-#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
+#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(page_number + 1)])
             width = self.iv_col_width
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, width, width)
             item = ListObject()
             item.text = descriptor
             item.doc_number = pdfdoc.nfile
-            item.page_number = npage
+            item.page_number = page_number
             item.thumbnail_width = 0
             item.doc_filename = pdfdoc.filename
             item.rendered = False
@@ -620,7 +624,10 @@ class PDFsnip(gtk.Builder):
     def add_pdf_pages(self, filename,
                             firstpage=None, lastpage=None,
                             angle=0, crop=[0.,0.,0.,0.]):
-        """Add pages of a pdf document to the model"""
+        """
+        Add pages of a pdf document to the model.
+        Note that firstpage and lastpage are zero based.
+        """
         res = False
         # Check if the document has already been loaded
         pdfdoc = None
@@ -641,26 +648,28 @@ class PDFsnip(gtk.Builder):
             else:
                 return res
 
-        n_start = 1
-        n_end = pdfdoc.npage
+        n_start = 0
+        n_end = pdfdoc.number_of_pages
         if firstpage:
-           n_start = min(n_end, max(1, firstpage))
+           n_start = min(n_end, max(1, firstpage + 1))
         if lastpage:
-           n_end = max(n_start, min(n_end, lastpage))
+           n_end = max(n_start, min(n_end, lastpage + 1))
 
-        for npage in range(n_start, n_end + 1):
+        for page_number in range(n_start, n_end):
 #            if only one document:
-            descriptor = ''.join([_('page'), ' ', str(npage)])
+            descriptor = ''.join([_('page'), ' ', str(page_number + 1)])
 #            else:
-#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(npage)])
-            width = self.iv_col_width
+#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(page_number + 1)])
+            pix_w, pix_h = pdfdoc.document.get_page(page_number).get_size()
+            pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), self.iv_col_width)
+            
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
-                                       8, width, width)
+                                       8, pix_w, pix_h)
             item = ListObject()
             item.text = descriptor
             item.doc_number = pdfdoc.nfile
-            item.page_number = npage
-            item.thumbnail_width = width / 2
+            item.page_number = page_number
+            item.thumbnail_width = pix_w
             item.doc_filename = pdfdoc.filename
             item.rendered = False
             item.rotation_angle = angle
@@ -791,31 +800,28 @@ class PDFsnip(gtk.Builder):
         for row in self.model:
             # add pages from input to output document
             obj = row[2]
-            nfile = obj.doc_number
-            npage = obj.page_number
-            current_page = pdf_input[nfile-1].getPage(npage-1)
+            current_page = pdf_input[obj.doc_number-1].getPage(obj.page_number)
             angle = obj.rotation_angle
             angle0 = current_page.get("/Rotate",0)
-            crop = obj.crop
             if angle is not 0:
                 current_page.rotateClockwise(angle)
-            if crop != [0.,0.,0.,0.]:
+            if obj.crop != [0.,0.,0.,0.]:
                 rotate_times = (((angle + angle0) % 360 + 45) / 90) % 4
-                crop_init = crop
+                crop_init = obj.crop
                 if rotate_times is not 0:
                     perm = [0,2,1,3]
                     for it in range(rotate_times):
                         perm.append(perm.pop(0))
                     perm.insert(1,perm.pop(2))
-                    crop = [crop_init[perm[side]] for side in range(4)]
+                    obj.crop = [crop_init[perm[side]] for side in range(4)]
                 #(x1, y1) = current_page.cropBox.lowerLeft
                 #(x2, y2) = current_page.cropBox.upperRight
                 (x1, y1) = [float(xy) for xy in current_page.mediaBox.lowerLeft]
                 (x2, y2) = [float(xy) for xy in current_page.mediaBox.upperRight]
-                x1_new = int(x1 + (x2-x1) * crop[0])
-                x2_new = int(x2 - (x2-x1) * crop[1])
-                y1_new = int(y1 + (y2-y1) * crop[3])
-                y2_new = int(y2 - (y2-y1) * crop[2])
+                x1_new = int(x1 + (x2-x1) * obj.crop[0])
+                x2_new = int(x2 - (x2-x1) * obj.crop[1])
+                y1_new = int(y1 + (y2-y1) * obj.crop[3])
+                y2_new = int(y2 - (y2-y1) * obj.crop[2])
                 #current_page.cropBox.lowerLeft = (x1_new, y1_new)
                 #current_page.cropBox.upperRight = (x2_new, y2_new)
                 current_page.mediaBox.lowerLeft = (x1_new, y1_new)
@@ -836,7 +842,7 @@ class PDFsnip(gtk.Builder):
             print("Currently saving don't work more than one file via pdftk. This will come next version. Keep tuned!")
         else:
             filename = self.pdfqueue[0].copyname
-            pages = [str(row[2].page_number) for row in self.model]
+            pages = [str(row[2].page_number + 1) for row in self.model]
 
             args = ["pdftk", filename]
             args.append("cat")
@@ -892,7 +898,7 @@ class PDFsnip(gtk.Builder):
         chooser.destroy()
         gobject.idle_add(self.retitle)
 
-    def clear_selected(self, button=None, data=None):
+    def delete_selected_page(self, button=None, data=None):
         """Removes the selected Element in the IconView"""
         model = self.iconview.get_model()
         selection = self.iconview.get_selected_items()
@@ -918,6 +924,18 @@ class PDFsnip(gtk.Builder):
                 self.rendering_thread.evnt.set()
                 self.rendering_thread.evnt.clear()
             
+    def load_all_thumbnails(self, button=None, data=None):
+        """Load all thumbs"""
+        for row in self.model:
+            item = row[2]
+            item.need_to_be_rendered = True
+
+        self.rendering_thread.restart_loop = True
+
+        if self.rendering_thread.paused:
+            self.rendering_thread.paused = False
+            self.rendering_thread.evnt.set()
+            self.rendering_thread.evnt.clear()
 
     def iv_drag_begin(self, iconview, context):
         """Sets custom icon on drag begin for multiple items selected"""
@@ -938,13 +956,11 @@ class PDFsnip(gtk.Builder):
             elif selection_data.target == 'MODEL_ROW_EXTERN':
                 iter = model.get_iter(path)
                 obj = model.get(iter, 2)
-                nfile, npage, angle = obj.doc_number, obj.page_number, obj.rotation_angle
-                crop = obj.crop
-                pdfdoc = self.pdfqueue[nfile - 1]
+                pdfdoc = self.pdfqueue[obj.doc_number - 1]
                 data.append('\n'.join([pdfdoc.filename,
-                                       str(npage),
-                                       str(angle)] +
-                                       [str(side) for side in crop]))
+                                       str(obj.page_number + 1),
+                                       str(obj.angle)] +
+                                       [str(side) for side in obj.crop]))
         if data:
             data = '\n;\n'.join(data)
             selection_data.set(selection_data.target, 8, data)
@@ -1001,9 +1017,9 @@ class PDFsnip(gtk.Builder):
                     while data:
                         tmp = data.pop(0).split('\n')
                         filename = tmp[0]
-                        npage, angle = [int(k) for k in tmp[1:3]]
+                        page_number, angle = [int(k) for k in tmp[1:3]]
                         crop = [float(side) for side in tmp[3:7]]
-                        if self.add_pdf_pages(filename, npage, npage,
+                        if self.add_pdf_pages(filename, page_number, page_number,
                                                         angle, crop):
                             if len(model) > 0:
                                 path = ref_to.get_path()
@@ -1092,9 +1108,9 @@ class PDFsnip(gtk.Builder):
             while data:
                 tmp = data.pop(0).split('\n')
                 filename = tmp[0]
-                npage, angle = [int(k) for k in tmp[1:3]]
+                page_number, angle = [int(k) for k in tmp[1:3]]
                 crop = [float(side) for side in tmp[3:7]]
-                if self.add_pdf_pages(filename, npage, npage, angle, crop):
+                if self.add_pdf_pages(filename, page_number, page_number, angle, crop):
                     if context.action == gtk.gdk.ACTION_MOVE:
                         context.finish(True, True, etime)
         elif target_id == self.TEXT_URI_LIST:
@@ -1139,8 +1155,6 @@ class PDFsnip(gtk.Builder):
         for path in selection:
             iter = model.get_iter(path)
             obj = model.get_value(iter, 2)
-            nfile = obj.doc_number
-            npage = obj.page_number
 
             rotate_times = (((-angle) % 360 + 45) / 90) % 4
             crop = [0.,0.,0.,0.]
@@ -1297,7 +1311,7 @@ class PDF_Doc:
                                                   self.shortname + '.pdf')
             shutil.copy(self.filename, self.copyname)
             self.document = poppler.document_new_from_file ("file://" + self.copyname, None)
-            self.npage = self.document.get_n_pages()
+            self.number_of_pages = self.document.get_n_pages()
         else:
             self.nfile = 0
 
@@ -1322,11 +1336,9 @@ class DJVU_Doc:
             self.document = self.djvu_context.new_document(djvu.decode.FileURI(self.copyname))
 #            self.document = poppler.document_new_from_file ("file://" + self.copyname, None)
             self.document.decoding_job.wait()
-            self.npage = len(self.document.pages)
-
+            self.number_of_pages = len(self.document.pages)
         else:
             self.nfile = 0
-
 
 
 class PDF_Renderer(threading.Thread, gobject.GObject):
@@ -1398,27 +1410,11 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         else:
             return False
 
-    def bbox_upscale(self, box, gizmo):
-        pix_w, pix_h = box
-        if pix_h < pix_w or Preferences.fitPageWidth:
-            pix_scale = float(gizmo)/float(pix_w)
-            pix_h = int(float(gizmo) * float(pix_h) / float(pix_w))
-            pix_w = gizmo
-        elif pix_h > pix_w:
-            pix_scale = float(gizmo)/float(pix_h)
-            pix_w = int(float(gizmo) * float(pix_w) / float(pix_h))
-            pix_h = gizmo
-        else:
-            pix_scale = float(gizmo)/float(pix_w)
-            pix_w = gizmo
-            pix_h = gizmo
-        return (pix_w, pix_h, pix_scale)
-
     def scale_pixbuf(self, pixbuf, gizmo_size):
         pix_w = pixbuf.get_width()
         pix_h = pixbuf.get_height()
         # Scale pixbuf
-        pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), gizmo_size)
+        pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), gizmo_size)
         thumbnail_small = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                8, pix_w , pix_h)
         pixbuf.scale(thumbnail_small, 0, 0, pix_w , pix_h, 0, 0,
@@ -1440,7 +1436,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             # Render page
             pix_w, pix_h = page.get_size()
             if self.scale == 0:
-                pix_w, pix_h, pix_scale = self.bbox_upscale((pix_w, pix_h), Preferences.gizmoSize)
+                pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), Preferences.gizmoSize)
             else:
                 pix_scale = self.scale
                 pix_w = int(pix_w * self.scale)
@@ -1513,9 +1509,9 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         except Exception, e:
             logging.exception(e)
 
-    def load_pdf_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
+    def load_pdf_thumbnail(self, pdfdoc, page_number, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
-        page = pdfdoc.document.get_page(npage-1)
+        page = pdfdoc.document.get_page(page_number)
         try:
             thumbnail = self.render_pdf_page(page, Preferences.gizmoSize, prefer_thumbs=self.prefer_thumbnails)
 
@@ -1549,9 +1545,9 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         return thumbnail
 
 
-    def load_djvu_thumbnail(self, pdfdoc, npage, rotation=0, crop=[0.,0.,0.,0.]):
+    def load_djvu_thumbnail(self, pdfdoc, page_number, rotation=0, crop=[0.,0.,0.,0.]):
         """Create pdf pixbuf"""
-        page = pdfdoc.document.pages[npage-1]
+        page = pdfdoc.document.pages[page_number]
         try:
             thumbnail = self.render_djvu_page(page, Preferences.gizmoSize, prefer_thumbs=self.prefer_thumbnails)
 
@@ -1731,6 +1727,27 @@ class PreferencesWindow(gtk.Dialog):
             Preferences.preferThumbnails = self.use_thumbs.get_active()
             Preferences.lazyThumbnailsRendering = self.thumbs_lazy_rendering.get_active()
             Preferences.gizmoSize = int(self.zoom.get_active_text())
+
+
+class PixbufUtils:
+
+    @staticmethod
+    def bbox_upscale(box, gizmo):
+        pix_w, pix_h = box
+        if pix_h < pix_w or Preferences.fitPageWidth:
+            pix_scale = float(gizmo)/float(pix_w)
+            pix_h = int(float(gizmo) * float(pix_h) / float(pix_w))
+            pix_w = gizmo
+        elif pix_h > pix_w:
+            pix_scale = float(gizmo)/float(pix_h)
+            pix_w = int(float(gizmo) * float(pix_w) / float(pix_h))
+            pix_h = gizmo
+        else:
+            pix_scale = float(gizmo)/float(pix_w)
+            pix_w = gizmo
+            pix_h = gizmo
+        return (pix_w, pix_h, pix_scale)
+
 
 
 class UndoRedoStack():
