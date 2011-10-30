@@ -146,7 +146,7 @@
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
                         <accelerator key="Delete" signal="activate"/>
-                        <signal name="activate" handler="clear_selected"/>
+                        <signal name="activate" handler="delete_selected_page"/>
                       </object>
                     </child>
                     <child>
@@ -231,6 +231,14 @@
                         <property name="label" translatable="yes">Zoom To Width</property>
                         <property name="use_underline">True</property>
                         <signal name="activate" handler="set_zoom_width"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkMenuItem" id="menuitem16">
+                        <property name="visible">True</property>
+                        <property name="label" translatable="yes">Load all thumbnails</property>
+                        <property name="use_underline">True</property>
+                        <signal name="activate" handler="load_all_thumbnails"/>
                       </object>
                     </child>
                   </object>
