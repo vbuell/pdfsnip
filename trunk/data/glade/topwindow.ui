@@ -226,11 +226,19 @@
                       </object>
                     </child>
                     <child>
-                      <object class="GtkMenuItem" id="menuitem15">
+                      <object class="GtkCheckMenuItem" id="menuitem15">
                         <property name="visible">True</property>
                         <property name="label" translatable="yes">Zoom To Width</property>
                         <property name="use_underline">True</property>
-                        <signal name="activate" handler="set_zoom_width"/>
+                        <signal name="toggled" handler="set_zoom_width"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckMenuItem" id="checkmenuitem1">
+                        <property name="visible">True</property>
+                        <property name="label" translatable="yes">Dual</property>
+                        <property name="use_underline">True</property>
+                        <signal name="toggled" handler="set_zoom_width_dual"/>
                       </object>
                     </child>
                     <child>
@@ -281,6 +289,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="model">ivModel</property>
+                <signal name="check_resize" handler="icon_view_resized"/>
               </object>
             </child>
           </object>

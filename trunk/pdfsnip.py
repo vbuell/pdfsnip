@@ -106,7 +106,9 @@ KEY_THUMBNAILS_LAZY = ROOT_DIR + '/thumbnails_lazy'
 
 
 class Preferences:
-
+    """
+    Application preferences. Note that not all are being saved to gconf.
+    """
     gizmoSize = 200
     windowWidth = min(700, gtk.gdk.screen_get_default().get_width() / 2)
     windowHeight = min(600, gtk.gdk.screen_get_default().get_height() - 50)
@@ -116,7 +118,9 @@ class Preferences:
     usePdftk = True
     lazyThumbnailsRendering = True
     fitPageWidth = False
+    fitPageWidthDual = False
     useAntialiazing = False
+    pageWidth = 0
 
     @staticmethod
     def load():
@@ -171,6 +175,7 @@ class ListObject:
         self.doc_number = None      # 2.Document number
         self.page_number = None     # 3.Page number
         self.thumbnail_width = None # 4.Thumbnail width
+        self.thumbnail_size = (0, 0)# Thumbnail size
         self.doc_filename = None    # 5.Document filename
         self.rendered = False       # 6.Rendered
         self.rotation_angle = None  # 7.Rotation angle
@@ -219,7 +224,12 @@ class PDFsnip(gtk.Builder):
 
         try:
             icon_theme = gtk.icon_theme_get_default()
-            gtk.window_set_default_icon(icon_theme.load_icon("pdfsnip", 64, 0))
+            if icon_theme.has_icon("pdfsnip"):
+                sizes = icon_theme.get_icon_sizes("pdfsnip")
+                logging.debug("Avail icon sizes: " + str(sizes))
+                self.icon = icon_theme.load_icon("pdfsnip", max(sizes), gtk.ICON_LOOKUP_NO_SVG)
+                gtk.window_set_default_icon(self.icon)
+                logging.debug("Choosen icon size: " + str(max(sizes)))
         except Exception, e:
             logging.exception(e)
             logging.error("Can't load icon. Application isn't installed correctly.")
@@ -247,12 +257,19 @@ class PDFsnip(gtk.Builder):
         sw.connect('button_press_event', self.sw_button_press_event)
 
         # Create ListStore model and IconView
-        self.model = gtk.ListStore(str, gtk.gdk.Pixbuf, gobject.TYPE_PYOBJECT)
-        self.iv_col_width = Preferences.gizmoSize
+        self.model = gtk.ListStore(str, gtk.gdk.Pixbuf, gobject.TYPE_PYOBJECT, str)
+        self.iconview_col_width = Preferences.gizmoSize
 
         self.iconview = self.iconview2
         self.iconview.set_model(self.model)
-        self.iconview.set_item_width(self.iv_col_width + 12)
+        self.iconview.set_item_width(self.iconview_col_width + 12)
+
+        # Borders and paddings
+        self.iconview.set_item_padding(1)
+        self.iconview.set_margin(0)
+        self.iconview.set_spacing(0)
+        self.iconview.set_column_spacing(0)
+        self.iconview.set_row_spacing(0)
 
         self.iconview.set_pixbuf_column(1)
 #        self.cellpb = gtk.CellRendererPixbuf()
@@ -260,10 +277,12 @@ class PDFsnip(gtk.Builder):
 #        self.iconview.pack_start(self.cellpb, False)
 #        self.iconview.set_attributes(self.cellpb, pixbuf=1)
 
+        self.iconview.set_tooltip_column(3)
+
 #        self.iconview.set_text_column(0)
         self.celltxt = gtk.CellRendererText()
-        self.celltxt.set_property('width', self.iv_col_width)
-        self.celltxt.set_property('wrap-width', self.iv_col_width)
+        self.celltxt.set_property('width', self.iconview_col_width)
+        self.celltxt.set_property('wrap-width', self.iconview_col_width)
         self.celltxt.set_property('alignment', pango.ALIGN_CENTER)
         self.iconview.pack_start(self.celltxt, False)
         self.iconview.set_attributes(self.celltxt, text=0)
@@ -460,14 +479,41 @@ class PDFsnip(gtk.Builder):
         self.redraw_thumbnails()
 
     def set_zoom_width(self, window, event=None):
-        """Zoom in thunbnails view to the window width."""
-        logging.debug("Clicked: set_zoom_width")
-        spacings = self.iconview.get_item_padding() * 2 + self.iconview.get_margin() * 2
-        logging.debug("Set spacing to iconview to " + str(spacings))
-        Preferences.gizmoSize = self.iconview2.get_allocation().width - int(spacings)
-        Preferences.fitPageWidth = True
-        logging.info("Set width to " + str(Preferences.gizmoSize))
+        """
+        Zoom in thunbnails view to the window width.
+        @type window: CheckMenuItem
+        """
+        logging.debug("Clicked: set_zoom_width. " + str(window))
+        checked = window.get_active()
+#        Preferences.gizmoSize = self.iconview2.get_allocation().width - int(spacings)
+        Preferences.fitPageWidth = checked
+        self.recalculate_gizmo_size()
         self.redraw_thumbnails()
+
+    def set_zoom_width_dual(self, window, event=None):
+        """
+        Zoom in thunbnails view to the window width.
+        @type window: CheckMenuItem
+        """
+        logging.debug("Clicked: set_zoom_width_dual. " + str(window))
+        checked = window.get_active()
+#        Preferences.gizmoSize = self.iconview2.get_allocation().width - int(spacings)
+        Preferences.fitPageWidthDual = checked
+        self.recalculate_gizmo_size()
+        self.redraw_thumbnails()
+
+    def recalculate_gizmo_size(self):
+        if Preferences.fitPageWidth:
+            if not Preferences.fitPageWidthDual:
+                spacings = self.iconview.get_item_padding() * 2 + (self.iconview.get_margin() + 1) * 2 + 2 * 1 + 2
+                logging.debug("Set spacing to iconview to " + str(spacings))
+                Preferences.pageWidth = self.iconview2.get_allocation().width - int(spacings)
+                logging.info("Set width to " + str(Preferences.gizmoSize))
+            else:
+                spacings = self.iconview.get_item_padding() * 4 + (self.iconview.get_margin() + 1) * 2 + 2 * 2 + 4 + self.iconview.get_column_spacing()
+                logging.debug("Set spacing to iconview to " + str(spacings))
+                Preferences.pageWidth = int((self.iconview2.get_allocation().width - int(spacings)) / 2)
+                logging.info("Set width to " + str(Preferences.gizmoSize))
 
     def __on_iconview_visibility_change(self, view=None, *args):
         logging.debug("__update_visibility")
@@ -477,11 +523,15 @@ class PDFsnip(gtk.Builder):
         start, end = vrange
 
         logging.info("Visible items: " + str(start[0]) + ":" + str(end[0]))
+        if self.iconview_col_width == 0:
+            logging.error("self.iconview_col_width == 0")
+            # TODO: Investigate the problem
+            self.iconview_col_width = 50
 
         # Here we drops all images that are out of sight
         if Preferences.fitPageWidth:
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
-                                       8, self.iv_col_width, self.iv_col_width)
+                                       8, self.iconview_col_width, self.iconview_col_width)
             for i in range(len(self.model)):
                 if i not in range(start[0], end[0] + 1):
                     item = self.model[i][2]
@@ -503,12 +553,15 @@ class PDFsnip(gtk.Builder):
     def on_window_size_request(self, window, event):
         """Main Window resize - workaround for autosetting of
            iconview cols no."""
-        col_num = 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
-        logging.debug("Set column size: " + str(col_num))
-#        col_num = (window.get_size()[0] - self.iconview.get_column_spacing() * 2) / ((self.iv_col_width + self.iconview.get_spacing() * 2 + self.iconview.get_margin() * 2))
-#        print "on_window_size_request", 9 * window.get_size()[0], (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2)), 9 * window.get_size()[0] / (10 * (self.iv_col_width + self.iconview.get_column_spacing() * 2))
+#        col_num = 9 * window.get_size()[0] / (10 * (self.iconview_col_width + self.iconview.get_column_spacing() * 2))
+#        logging.debug("Set column size: " + str(col_num))
+#        col_num = (window.get_size()[0] - self.iconview.get_column_spacing() * 2) / ((self.iconview_col_width + self.iconview.get_spacing() * 2 + self.iconview.get_margin() * 2))
+#        print "on_window_size_request", 9 * window.get_size()[0], (10 * (self.iconview_col_width + self.iconview.get_column_spacing() * 2)), 9 * window.get_size()[0] / (10 * (self.iconview_col_width + self.iconview.get_column_spacing() * 2))
 #        print "get_spacing", self.iconview.get_spacing(), "get_row_spacing", self.iconview.get_row_spacing(), "get_column_spacing", self.iconview.get_column_spacing(), "get_margin", self.iconview.get_margin()
-        self.iconview.set_columns(col_num)
+#        self.iconview.set_columns(col_num)
+        self.recalculate_gizmo_size()
+        if Preferences.fitPageWidth:
+            self.redraw_thumbnails()
 
     def reset_iv_width(self, renderer=None):
         """Reconfigures the width of the iconview columns"""
@@ -518,12 +571,12 @@ class PDFsnip(gtk.Builder):
         if not len(self.model):
             return
         max_w = max(row[2].thumbnail_width for row in self.model)
-        logging.debug("(reset_iv_width) Before: " + str(self.iv_col_width) + " After: " + str(max_w))
-        if max_w != self.iv_col_width:
-            self.iv_col_width = max_w
-            self.celltxt.set_property('width', self.iv_col_width)
-            self.celltxt.set_property('wrap-width', self.iv_col_width)
-            self.iconview.set_item_width(self.iv_col_width + 12) #-1)
+        logging.debug("(reset_iv_width) Before: " + str(self.iconview_col_width) + " After: " + str(max_w))
+        if max_w != self.iconview_col_width:
+            self.iconview_col_width = max_w
+            self.celltxt.set_property('width', self.iconview_col_width)
+            self.celltxt.set_property('wrap-width', self.iconview_col_width)
+            self.iconview.set_item_width(self.iconview_col_width + self.iconview.get_item_padding() * 2)
             self.on_window_size_request(self.topWindow, None)
 
     def close_application(self, widget, event=None, data=None):
@@ -593,9 +646,8 @@ class PDFsnip(gtk.Builder):
         for page_number in range(n_start, n_end):
 #            if only one document:
             descriptor = ''.join([_('page'), ' ', str(page_number + 1)])
-#            else:
-#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(page_number + 1)])
-            width = self.iv_col_width
+            tooltip = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(page_number + 1)])
+            width = self.iconview_col_width
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, width, width)
             item = ListObject()
@@ -611,7 +663,8 @@ class PDFsnip(gtk.Builder):
 
             self.model.append((descriptor,
                                thumbnail,
-                               item))
+                               item,
+                               tooltip))
             res = True
 
         gobject.idle_add(self.retitle)
@@ -658,10 +711,9 @@ class PDFsnip(gtk.Builder):
         for page_number in range(n_start, n_end):
 #            if only one document:
             descriptor = ''.join([_('page'), ' ', str(page_number + 1)])
-#            else:
-#            descriptor = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(page_number + 1)])
+            tooltip = ''.join([pdfdoc.shortname, '\n', _('page'), ' ', str(page_number + 1)])
             pix_w, pix_h = pdfdoc.document.get_page(page_number).get_size()
-            pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), self.iv_col_width)
+            pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), self.iconview_col_width)
             
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, pix_w, pix_h)
@@ -670,6 +722,7 @@ class PDFsnip(gtk.Builder):
             item.doc_number = pdfdoc.nfile
             item.page_number = page_number
             item.thumbnail_width = pix_w
+            item.thumbnail_size = (pix_w, pix_h)
             item.doc_filename = pdfdoc.filename
             item.rendered = False
             item.rotation_angle = angle
@@ -678,7 +731,8 @@ class PDFsnip(gtk.Builder):
 
             self.model.append((descriptor,
                                thumbnail,
-                               item))
+                               item,
+                               tooltip))
             res = True
 
         gobject.idle_add(self.retitle)
@@ -902,17 +956,18 @@ class PDFsnip(gtk.Builder):
         """Removes the selected Element in the IconView"""
         model = self.iconview.get_model()
         selection = self.iconview.get_selected_items()
-        if selection:
-            selection.sort(reverse=True)
-            self.set_dirty(True)
-            for path in selection:
-                iter = model.get_iter(path)
-                model.remove(iter)
-            path = selection[-1]
 
-            self.iconview.select_path(path)
-            self.iconview.set_cursor(path)
-            if not self.iconview.path_is_selected(path):
+        if selection:
+            self.set_dirty(True)
+            iters = [model.get_iter(path) for path in selection]
+            for iter in iters:
+                model.remove(iter)
+
+            iter_next_selected = model.get_path(iters[-1])
+
+            self.iconview.set_cursor(iter_next_selected)
+            self.iconview.select_path(iter_next_selected)
+            if not self.iconview.path_is_selected(iter_next_selected):
                 if len(model) > 0:	# select the last row
                     row = model[-1]
                     path = row.path
@@ -1268,7 +1323,7 @@ class PDFsnip(gtk.Builder):
                 self.rendering_thread.evnt.clear()
         elif result == gtk.RESPONSE_CANCEL:
             print(_('Dialog closed'))
-        dialog.destroy()
+        dialog.hide()
 
     def preferences_dialog(self, widget=None, data=None):
         """Opens a preferences dialog box"""
@@ -1290,11 +1345,18 @@ class PDFsnip(gtk.Builder):
             'PdfSnip is an GTK+ based utility for splitting, rearrangement ' \
             'and modification of PDF documents.'))
         about_dialog.set_authors(['Volodymyr Buell','Konstantinos Poulios',])
-        about_dialog.set_website_label('http://code.google.com/p/pdfsnip/')
-        about_dialog.set_logo_icon_name('pdfsnip')
+        about_dialog.set_artists(['Marina Popovichenko'])
+        about_dialog.set_website('http://code.google.com/p/pdfsnip/')
+        if self.icon:
+            about_dialog.set_logo(self.icon)
+        else:
+            about_dialog.set_logo_icon_name('pdfsnip')
         about_dialog.connect('response', lambda w, a: about_dialog.destroy())
         about_dialog.connect('delete_event', lambda w, a: about_dialog.destroy())
         about_dialog.show_all()
+
+    def icon_view_resized(self):
+        print "."
 
 class PDF_Doc:
     """Class handling pdf documents"""
@@ -1735,9 +1797,9 @@ class PixbufUtils:
     def bbox_upscale(box, gizmo):
         pix_w, pix_h = box
         if pix_h < pix_w or Preferences.fitPageWidth:
-            pix_scale = float(gizmo)/float(pix_w)
-            pix_h = int(float(gizmo) * float(pix_h) / float(pix_w))
-            pix_w = gizmo
+            pix_scale = float(Preferences.pageWidth)/float(pix_w)
+            pix_h = int(float(Preferences.pageWidth) * float(pix_h) / float(pix_w))
+            pix_w = Preferences.pageWidth
         elif pix_h > pix_w:
             pix_scale = float(gizmo)/float(pix_h)
             pix_w = int(float(gizmo) * float(pix_w) / float(pix_h))
