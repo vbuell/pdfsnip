@@ -25,7 +25,7 @@ import re
 from distutils.core import setup
 
 data_files=[('share/applications/', ['data/pdfsnip.desktop']),
-            ('share/pixmaps/', ['data/icons/pdfsnip.svg']),
+#            ('share/pixmaps/', ['data/icons/pdfsnip.svg']),
             ('share/pixmaps/', ['data/icons/pdfsnip.png']),
             ('share/pdfsnip/', ['data/glade/topwindow.ui']),
 
@@ -33,7 +33,11 @@ data_files=[('share/applications/', ['data/pdfsnip.desktop']),
             ("share/icons/hicolor/22x22/apps", ["data/icons/22x22/pdfsnip.png"]),
             ("share/icons/hicolor/24x24/apps", ["data/icons/24x24/pdfsnip.png"]),
             ("share/icons/hicolor/32x32/apps", ["data/icons/32x32/pdfsnip.png"]),
-            ("share/icons/hicolor/scalable/apps", ["data/icons/pdfsnip.svg"])  ]
+            ("share/icons/hicolor/48x48/apps", ["data/icons/48x48/pdfsnip.png"]),
+            ("share/icons/hicolor/64x64/apps", ["data/icons/64x64/pdfsnip.png"]),
+            ("share/icons/hicolor/128x128/apps", ["data/icons/128x128/pdfsnip.png"]),
+            ("share/icons/hicolor/256x256/apps", ["data/icons/256x256/pdfsnip.png"])  ]
+#            ("share/icons/hicolor/scalable/apps", ["data/icons/pdfsnip.svg"])  ]
 
 
 # Freshly generate .mo from .po, add to data_files:
@@ -41,7 +45,7 @@ if os.path.isdir('mo/'):
     os.system ('rm -r mo/')
 for name in os.listdir('po'):
     m = re.match(r'(.+)\.po$', name)
-    if m != None:
+    if m is not None:
         lang = m.group(1)
         out_dir = 'mo/%s/LC_MESSAGES' % lang
         out_name = os.path.join(out_dir, 'pdfsnip.mo')
