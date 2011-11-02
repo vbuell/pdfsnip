@@ -265,11 +265,11 @@ class PDFsnip(gtk.Builder):
         self.iconview.set_item_width(self.iconview_col_width + 12)
 
         # Borders and paddings
-        self.iconview.set_item_padding(1)
-        self.iconview.set_margin(0)
-        self.iconview.set_spacing(0)
-        self.iconview.set_column_spacing(0)
-        self.iconview.set_row_spacing(0)
+#        self.iconview.set_item_padding(1)
+#        self.iconview.set_margin(0)
+#        self.iconview.set_spacing(0)
+#        self.iconview.set_column_spacing(0)
+#        self.iconview.set_row_spacing(0)
 
         self.iconview.set_pixbuf_column(1)
 #        self.cellpb = gtk.CellRendererPixbuf()
