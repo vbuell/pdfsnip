@@ -2,9 +2,5 @@ The project based on the code written by Konstantinos Poulios <poulios.konstanti
 The files are released under the GNU General Public License (GPL). See the headers of the files
 in question for copyright and license information.
 
-Icons are written by Marina Popovichenko and are licensed under a Creative Commons Attribution 2.5 License.
-This means you may use it for any purpose, and make any changes you like. All Marina asks is that you include a
-link back to this page in your credits.
-
-The icons can also be used under Creative Commons Attribution 3.0 License (Hi Debian folks!) with the following requirements:
-As an author, I would appreciate a reference to my authorship of the Silk icon set contents within a readme file or equivalent documentation for the software which includes the set or a subset of the icons contained within.
+Icons are written by Marina Popovichenko and are licensed under a Creative Commons Attribution 2.5 License. See
+COPYING_ICONS for details.
