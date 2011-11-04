@@ -103,13 +103,17 @@ KEY_WINDOW_HEIGHT = ROOT_DIR + '/ui_height'
 KEY_USE_PDFTK = ROOT_DIR + '/use_pdftk'
 KEY_THUMBNAILS_SIZE = ROOT_DIR + '/thumbnails_size'
 KEY_THUMBNAILS_LAZY = ROOT_DIR + '/thumbnails_lazy'
+KEY_FIT_WIDTH = ROOT_DIR + '/fit_width'
+KEY_FIT_WIDTH_DUAL = ROOT_DIR + '/fit_width_double'
+
+GIZMO_SIZES = [75, 100, 200, 300, 400, 500, 600, 700, 800]
 
 
 class Preferences:
     """
     Application preferences. Note that not all are being saved to gconf.
     """
-    gizmoSize = 200
+    gizmoSize = 2
     windowWidth = min(700, gtk.gdk.screen_get_default().get_width() / 2)
     windowHeight = min(600, gtk.gdk.screen_get_default().get_height() - 50)
     windowX = 200
@@ -154,6 +158,16 @@ class Preferences:
                 Preferences.lazyThumbnailsRendering = gconf_value
             else:
                 logging.error("Not a BOOL!!!! " + str(gconf_value))
+            gconf_value = gconf_client.get_bool(KEY_FIT_WIDTH)
+            if isinstance(gconf_value, bool):
+                Preferences.fitPageWidth = gconf_value
+            else:
+                logging.error("Not a BOOL!!!! " + str(gconf_value))
+            gconf_value = gconf_client.get_bool(KEY_FIT_WIDTH_DUAL)
+            if isinstance(gconf_value, bool):
+                Preferences.fitPageWidthDual = gconf_value
+            else:
+                logging.error("Not a BOOL!!!! " + str(gconf_value))
             logging.debug("Loaded preferences from gconf: " + str(Preferences.__dict__))
         except Exception, e:
             logging.exception(e)
@@ -165,6 +179,8 @@ class Preferences:
         Preferences.gconf_client.set_bool(KEY_USE_PDFTK, Preferences.usePdftk)
         Preferences.gconf_client.set_string(KEY_THUMBNAILS_SIZE, str(Preferences.gizmoSize))
         Preferences.gconf_client.set_bool(KEY_THUMBNAILS_LAZY, Preferences.lazyThumbnailsRendering)
+        Preferences.gconf_client.set_bool(KEY_FIT_WIDTH, Preferences.fitPageWidth)
+        Preferences.gconf_client.set_bool(KEY_FIT_WIDTH_DUAL, Preferences.fitPageWidthDual)
 
         logging.debug("Preferences saved.")
 
@@ -258,7 +274,7 @@ class PDFsnip(gtk.Builder):
 
         # Create ListStore model and IconView
         self.model = gtk.ListStore(str, gtk.gdk.Pixbuf, gobject.TYPE_PYOBJECT, str)
-        self.iconview_col_width = Preferences.gizmoSize
+        self.iconview_col_width = self.get_current_gizmo_size()
 
         self.iconview = self.iconview2
         self.iconview.set_model(self.model)
@@ -363,7 +379,7 @@ class PDFsnip(gtk.Builder):
         gobject.signal_new('update_thumbnail', PDF_Renderer,
                            gobject.SIGNAL_RUN_FIRST, gobject.TYPE_NONE, [gobject.TYPE_PYOBJECT, gobject.TYPE_PYOBJECT])
         self.rendering_thread = PDF_Renderer(self.model, self.pdfqueue,
-                                             0, Preferences.gizmoSize)
+                                             0, self.get_current_gizmo_size())
         self.rendering_thread.connect('reset_iv_width', self.reset_iv_width)
         self.rendering_thread.connect('update_progress_bar', self.update_progress_bar)
         self.rendering_thread.connect('update_thumbnail', self.update_thumbnail)
@@ -393,6 +409,13 @@ class PDFsnip(gtk.Builder):
             raise AttributeError('object %r has no attribute %r' % (self,attr))
         setattr(self, attr, obj)
         return obj
+
+    def get_current_gizmo_size(self):
+        try:
+            return GIZMO_SIZES[Preferences.gizmoSize]
+        except IndexError:
+            Preferences.gizmoSize = 2
+            return GIZMO_SIZES[Preferences.gizmoSize]
 
     def on_undo(self, window, event):
         pass
@@ -467,16 +490,18 @@ class PDFsnip(gtk.Builder):
     def set_zoom_in(self, window, event=None):
         """Zoom in thunbnails view."""
         logging.debug("Clicked: set_zoom_in")
-        Preferences.gizmoSize *= 2
         Preferences.fitPageWidth = False
-        self.redraw_thumbnails()
+        if Preferences.gizmoSize < len(GIZMO_SIZES) - 1:
+            Preferences.gizmoSize += 1
+            self.redraw_thumbnails()
 
     def set_zoom_out(self, window, event=None):
         """Zoom out thunbnails view."""
         logging.debug("Clicked: set_zoom_out")
-        Preferences.gizmoSize /= 2
         Preferences.fitPageWidth = False
-        self.redraw_thumbnails()
+        if Preferences.gizmoSize > 0:
+            Preferences.gizmoSize -= 1
+            self.redraw_thumbnails()
 
     def set_zoom_width(self, window, event=None):
         """
@@ -508,12 +533,12 @@ class PDFsnip(gtk.Builder):
                 spacings = self.iconview.get_item_padding() * 2 + (self.iconview.get_margin() + 1) * 2 + 2 * 1 + 2
                 logging.debug("Set spacing to iconview to " + str(spacings))
                 Preferences.pageWidth = self.iconview2.get_allocation().width - int(spacings)
-                logging.info("Set width to " + str(Preferences.gizmoSize))
+                logging.info("Set width to " + str(self.get_current_gizmo_size()))
             else:
                 spacings = self.iconview.get_item_padding() * 4 + (self.iconview.get_margin() + 1) * 2 + 2 * 2 + 4 + self.iconview.get_column_spacing()
                 logging.debug("Set spacing to iconview to " + str(spacings))
                 Preferences.pageWidth = int((self.iconview2.get_allocation().width - int(spacings)) / 2)
-                logging.info("Set width to " + str(Preferences.gizmoSize))
+                logging.info("Set width to " + str(self.get_current_gizmo_size()))
 
     def __on_iconview_visibility_change(self, view=None, *args):
         logging.debug("__update_visibility")
@@ -1493,12 +1518,12 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             if thumbnail:
                 got_pixbuf = True
                 print "Got thumbnail!!!!", thumbnail.get_width(), thumbnail.get_height()
-                thumbnail = self.scale_pixbuf(thumbnail, Preferences.gizmoSize)
+                thumbnail = self.scale_pixbuf(thumbnail, GIZMO_SIZES[Preferences.gizmoSize])
         if not got_pixbuf:
             # Render page
             pix_w, pix_h = page.get_size()
             if self.scale == 0:
-                pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), Preferences.gizmoSize)
+                pix_w, pix_h, pix_scale = PixbufUtils.bbox_upscale((pix_w, pix_h), GIZMO_SIZES[Preferences.gizmoSize])
             else:
                 pix_scale = self.scale
                 pix_w = int(pix_w * self.scale)
@@ -1518,7 +1543,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             page.render_to_pixbuf(0,0,pix_w,pix_h, pix_scale, 0, thumbnail)
 
             if antialiasing:
-                thumbnail = self.scale_pixbuf(thumbnail, Preferences.gizmoSize)
+                thumbnail = self.scale_pixbuf(thumbnail, GIZMO_SIZES[Preferences.gizmoSize])
         return thumbnail
 
 
@@ -1564,7 +1589,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
             thumbnail = gtk.gdk.pixbuf_new_from_data(color_buffer, gtk.gdk.COLORSPACE_RGB, False, 8, pix_w, pix_h, bytes_per_line)
 
             # Resize
-            thumbnail = self.scale_pixbuf(thumbnail, Preferences.gizmoSize)
+            thumbnail = self.scale_pixbuf(thumbnail, GIZMO_SIZES[Preferences.gizmoSize])
 
             print "3"
             return thumbnail
@@ -1575,7 +1600,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         """Create pdf pixbuf"""
         page = pdfdoc.document.get_page(page_number)
         try:
-            thumbnail = self.render_pdf_page(page, Preferences.gizmoSize, prefer_thumbs=self.prefer_thumbnails)
+            thumbnail = self.render_pdf_page(page, GIZMO_SIZES[Preferences.gizmoSize], prefer_thumbs=self.prefer_thumbnails)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
@@ -1596,7 +1621,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                 pix_h = thumbnail.get_height()
         except Exception, e:
             print "Exception detected:", e
-            pix_w = Preferences.gizmoSize
+            pix_w = GIZMO_SIZES[Preferences.gizmoSize]
             pix_h = pix_w
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, pix_w, pix_h)
@@ -1611,7 +1636,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
         """Create pdf pixbuf"""
         page = pdfdoc.document.pages[page_number]
         try:
-            thumbnail = self.render_djvu_page(page, Preferences.gizmoSize, prefer_thumbs=self.prefer_thumbnails)
+            thumbnail = self.render_djvu_page(page, GIZMO_SIZES[Preferences.gizmoSize], prefer_thumbs=self.prefer_thumbnails)
 
             rotation = (-rotation) % 360
             rotation = ((rotation + 45) / 90) * 90
@@ -1632,7 +1657,7 @@ class PDF_Renderer(threading.Thread, gobject.GObject):
                 pix_h = thumbnail.get_height()
         except Exception, e:
             print "Exception detected:", e
-            pix_w = Preferences.gizmoSize
+            pix_w = GIZMO_SIZES[Preferences.gizmoSize]
             pix_h = pix_w
             thumbnail = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False,
                                        8, pix_w, pix_h)
@@ -1788,7 +1813,7 @@ class PreferencesWindow(gtk.Dialog):
             Preferences.usePdftk = self.use_pdftk.get_active()
             Preferences.preferThumbnails = self.use_thumbs.get_active()
             Preferences.lazyThumbnailsRendering = self.thumbs_lazy_rendering.get_active()
-            Preferences.gizmoSize = int(self.zoom.get_active_text())
+# TODO            Preferences.gizmoSize = int(self.zoom.get_active_text())
 
 
 class PixbufUtils:
